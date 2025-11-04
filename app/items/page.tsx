@@ -181,10 +181,28 @@ export default function ItemsPage() {
   return (
     <div className="p-8">
       <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Product Profitability Analysis</h1>
+        <div className="flex items-center justify-between mb-2">
+          <h1 className="text-3xl font-bold text-gray-900">Product Profitability Analysis</h1>
+          <button
+            onClick={() => fetchProducts()}
+            disabled={loading}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+          >
+            <span>{loading ? 'Refreshing...' : '🔄 Refresh Data'}</span>
+          </button>
+        </div>
         <p className="text-gray-600">
           Grouped by product with collapsible SKU details. Only includes products with clean invoice data (single-SKU orders).
         </p>
+        {products.length === 0 && !loading && (
+          <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+            <p className="text-yellow-800 font-semibold">No products found with clean invoice data</p>
+            <p className="text-yellow-700 text-sm mt-1">
+              This could mean: (1) No invoices uploaded yet, (2) No single-SKU orders with invoice data, or (3) Views need to be created.
+              Check the diagnostic SQL below or try uploading invoices.
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Summary Stats */}
