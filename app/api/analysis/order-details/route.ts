@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { supabaseAdmin } from '@/lib/supabase';
 
 export async function GET(request: NextRequest) {
   try {
@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Fetch order details
-    const { data: orderData, error: orderError } = await supabase
+    const { data: orderData, error: orderError } = await supabaseAdmin
       .from('shopify_orders')
       .select('*')
       .eq('order_number', orderNumber)
@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Fetch line items
-    const { data: lineItems, error: lineItemsError } = await supabase
+    const { data: lineItems, error: lineItemsError } = await supabaseAdmin
       .from('shopify_order_items')
       .select('*')
       .eq('order_id', orderData.order_id);
@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Fetch commodity items
-    const { data: commodityItems, error: commodityError } = await supabase
+    const { data: commodityItems, error: commodityError } = await supabaseAdmin
       .from('invoice_commodity_items')
       .select('*')
       .eq('order_number', orderNumber);
@@ -48,7 +48,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Fetch freight items
-    const { data: freightItems, error: freightError } = await supabase
+    const { data: freightItems, error: freightError } = await supabaseAdmin
       .from('invoice_freight_items')
       .select('*')
       .eq('order_number', orderNumber);

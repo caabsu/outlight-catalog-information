@@ -1,22 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { supabaseAdmin } from '@/lib/supabase';
 
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
     const orderNumber = searchParams.get('order_number');
 
-    let query = supabase
+    let query = supabaseAdmin
       .from('order_cost_analysis')
       .select('*', { count: 'exact' })
       .order('order_date', { ascending: false });
 
     if (orderNumber) {
       query = query.eq('order_number', orderNumber);
-    } else {
-      // Fetch ALL orders - no limit
-      // Supabase defaults to 1000 rows, we need to override that
-      query = query.range(0, 999999);
     }
 
     const { data, error, count } = await query;
