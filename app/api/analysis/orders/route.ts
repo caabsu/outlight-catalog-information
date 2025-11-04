@@ -25,9 +25,26 @@ export async function GET(request: NextRequest) {
       throw error;
     }
 
-    console.log(`Fetched ${data?.length || 0} orders from database (total: ${count})`);
+    console.log(`Query returned ${data?.length || 0} orders from view (count header: ${count})`);
 
-    return NextResponse.json({ success: true, data, count });
+    // Also check the base table count for debugging
+    const { count: baseTableCount } = await supabaseAdmin
+      .from('shopify_orders')
+      .select('*', { count: 'exact', head: true });
+
+    console.log(`Base table shopify_orders has ${baseTableCount} total records`);
+    console.log(`View order_cost_analysis returned ${data?.length || 0} records (count: ${count})`);
+
+    return NextResponse.json({
+      success: true,
+      data,
+      count,
+      debug: {
+        baseTableCount,
+        viewReturnedRows: data?.length,
+        viewCount: count
+      }
+    });
   } catch (error: any) {
     console.error('Error in order analysis API:', error);
     return NextResponse.json(
