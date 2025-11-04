@@ -36,11 +36,7 @@ export default function OrdersPage() {
 
       if (data.success) {
         setOrders(data.data || []);
-        console.log('📊 Orders API Debug Info:', {
-          ordersReceived: data.data?.length || 0,
-          apiCount: data.count,
-          debugInfo: data.debug
-        });
+        console.log(`✓ Loaded ${data.data?.length || 0} orders`);
       }
     } catch (error) {
       console.error('Error fetching orders:', error);
