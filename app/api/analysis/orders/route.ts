@@ -8,21 +8,27 @@ export async function GET(request: NextRequest) {
 
     let query = supabase
       .from('order_cost_analysis')
-      .select('*')
+      .select('*', { count: 'exact' })
       .order('order_date', { ascending: false });
 
     if (orderNumber) {
       query = query.eq('order_number', orderNumber);
+    } else {
+      // Fetch ALL orders - no limit
+      // Supabase defaults to 1000 rows, we need to override that
+      query = query.range(0, 999999);
     }
 
-    const { data, error } = await query;
+    const { data, error, count } = await query;
 
     if (error) {
       console.error('Error fetching order analysis:', error);
       throw error;
     }
 
-    return NextResponse.json({ success: true, data });
+    console.log(`Fetched ${data?.length || 0} orders from database (total: ${count})`);
+
+    return NextResponse.json({ success: true, data, count });
   } catch (error: any) {
     console.error('Error in order analysis API:', error);
     return NextResponse.json(

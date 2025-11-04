@@ -5,7 +5,7 @@ import { OrderCostAnalysis } from '@/lib/types';
 import { format } from 'date-fns';
 
 type TabType = 'all' | 'profitable' | 'low-margin' | 'recent';
-type SortField = 'order_date' | 'profit_percentage' | 'total_fulfillment_cost_usd';
+type SortField = 'order_date' | 'profit_percentage' | 'total_fulfillment_cost_usd' | 'shopify_total_usd' | 'profit_usd' | 'order_number';
 type SortOrder = 'asc' | 'desc';
 
 export default function OrdersPage() {
@@ -22,6 +22,7 @@ export default function OrdersPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(25);
   const [dateFilter, setDateFilter] = useState<string>('all'); // all, today, week, month
+  const [hideZeroCost, setHideZeroCost] = useState(false);
 
   useEffect(() => {
     fetchOrders();
@@ -104,18 +105,34 @@ export default function OrdersPage() {
       );
     }
 
+    // Hide zero cost filter
+    if (hideZeroCost) {
+      filtered = filtered.filter(o => (o.total_fulfillment_cost_usd || 0) > 0);
+    }
+
     // Sort
     filtered.sort((a, b) => {
-      const aVal = a[sortField] || 0;
-      const bVal = b[sortField] || 0;
+      let aVal: any = a[sortField];
+      let bVal: any = b[sortField];
 
+      // Handle different field types
       if (sortField === 'order_date') {
         return sortOrder === 'asc'
-          ? new Date(aVal).getTime() - new Date(bVal).getTime()
-          : new Date(bVal).getTime() - new Date(aVal).getTime();
+          ? new Date(aVal || 0).getTime() - new Date(bVal || 0).getTime()
+          : new Date(bVal || 0).getTime() - new Date(aVal || 0).getTime();
+      } else if (sortField === 'order_number') {
+        // String comparison for order numbers
+        aVal = String(aVal || '');
+        bVal = String(bVal || '');
+        return sortOrder === 'asc'
+          ? aVal.localeCompare(bVal)
+          : bVal.localeCompare(aVal);
+      } else {
+        // Numeric comparison for all other fields
+        aVal = Number(aVal || 0);
+        bVal = Number(bVal || 0);
+        return sortOrder === 'asc' ? aVal - bVal : bVal - aVal;
       }
-
-      return sortOrder === 'asc' ? (aVal > bVal ? 1 : -1) : (bVal > aVal ? 1 : -1);
     });
 
     return filtered;
@@ -139,6 +156,39 @@ export default function OrdersPage() {
     if (profitPercentage >= 30) return { label: 'High', color: 'bg-emerald-500' };
     if (profitPercentage >= 15) return { label: 'Medium', color: 'bg-amber-500' };
     return { label: 'Low', color: 'bg-red-500' };
+  };
+
+  const handleColumnSort = (field: SortField) => {
+    if (sortField === field) {
+      // Toggle sort order if clicking the same column
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      // Set new field and default to descending
+      setSortField(field);
+      setSortOrder('desc');
+    }
+  };
+
+  const getSortIcon = (field: SortField) => {
+    if (sortField !== field) {
+      return (
+        <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+        </svg>
+      );
+    }
+    if (sortOrder === 'asc') {
+      return (
+        <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+        </svg>
+      );
+    }
+    return (
+      <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+      </svg>
+    );
   };
 
   return (
@@ -250,12 +300,36 @@ export default function OrdersPage() {
             >
               <option value="order_date-desc">Date (Newest)</option>
               <option value="order_date-asc">Date (Oldest)</option>
-              <option value="profit_percentage-desc">Profit % (High)</option>
-              <option value="profit_percentage-asc">Profit % (Low)</option>
+              <option value="order_number-asc">Order # (A-Z)</option>
+              <option value="order_number-desc">Order # (Z-A)</option>
+              <option value="shopify_total_usd-desc">Revenue (High)</option>
+              <option value="shopify_total_usd-asc">Revenue (Low)</option>
               <option value="total_fulfillment_cost_usd-desc">Cost (High)</option>
               <option value="total_fulfillment_cost_usd-asc">Cost (Low)</option>
+              <option value="profit_usd-desc">Profit $ (High)</option>
+              <option value="profit_usd-asc">Profit $ (Low)</option>
+              <option value="profit_percentage-desc">Margin % (High)</option>
+              <option value="profit_percentage-asc">Margin % (Low)</option>
             </select>
           </div>
+        </div>
+
+        {/* Hide Zero Cost Toggle */}
+        <div className="mt-4 pt-4 border-t border-gray-200">
+          <label className="flex items-center cursor-pointer">
+            <input
+              type="checkbox"
+              checked={hideZeroCost}
+              onChange={(e) => {
+                setHideZeroCost(e.target.checked);
+                setCurrentPage(1);
+              }}
+              className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+            />
+            <span className="ml-2 text-sm font-medium text-gray-700">
+              Hide orders with $0 cost (no invoice data)
+            </span>
+          </label>
         </div>
       </div>
 
@@ -273,23 +347,59 @@ export default function OrdersPage() {
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Order
+                    <th
+                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                      onClick={() => handleColumnSort('order_number')}
+                    >
+                      <div className="flex items-center gap-1">
+                        Order
+                        {getSortIcon('order_number')}
+                      </div>
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Date
+                    <th
+                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                      onClick={() => handleColumnSort('order_date')}
+                    >
+                      <div className="flex items-center gap-1">
+                        Date
+                        {getSortIcon('order_date')}
+                      </div>
                     </th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Revenue
+                    <th
+                      className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                      onClick={() => handleColumnSort('shopify_total_usd')}
+                    >
+                      <div className="flex items-center justify-end gap-1">
+                        Revenue
+                        {getSortIcon('shopify_total_usd')}
+                      </div>
                     </th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Cost
+                    <th
+                      className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                      onClick={() => handleColumnSort('total_fulfillment_cost_usd')}
+                    >
+                      <div className="flex items-center justify-end gap-1">
+                        Cost
+                        {getSortIcon('total_fulfillment_cost_usd')}
+                      </div>
                     </th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Profit
+                    <th
+                      className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                      onClick={() => handleColumnSort('profit_usd')}
+                    >
+                      <div className="flex items-center justify-end gap-1">
+                        Profit
+                        {getSortIcon('profit_usd')}
+                      </div>
                     </th>
-                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Margin
+                    <th
+                      className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                      onClick={() => handleColumnSort('profit_percentage')}
+                    >
+                      <div className="flex items-center justify-center gap-1">
+                        Margin
+                        {getSortIcon('profit_percentage')}
+                      </div>
                     </th>
                     <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Actions

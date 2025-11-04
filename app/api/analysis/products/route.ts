@@ -8,21 +8,26 @@ export async function GET(request: NextRequest) {
 
     let query = supabase
       .from('product_cost_analysis')
-      .select('*')
+      .select('*', { count: 'exact' })
       .order('total_quantity_sold', { ascending: false });
 
     if (sku) {
       query = query.eq('sku', sku);
+    } else {
+      // Fetch ALL products - no limit
+      query = query.range(0, 999999);
     }
 
-    const { data, error } = await query;
+    const { data, error, count } = await query;
 
     if (error) {
       console.error('Error fetching product analysis:', error);
       throw error;
     }
 
-    return NextResponse.json({ success: true, data });
+    console.log(`Fetched ${data?.length || 0} products from database (total: ${count})`);
+
+    return NextResponse.json({ success: true, data, count });
   } catch (error: any) {
     console.error('Error in product analysis API:', error);
     return NextResponse.json(
