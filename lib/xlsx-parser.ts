@@ -46,17 +46,42 @@ function isCommoditySheet(data: any[]): boolean {
 
 /**
  * Detect if a sheet is a freight sheet based on column names
+ * CRITICAL: Must not match commodity sheets that have "Domestic Freight" column
  */
 function isFreightSheet(data: any[]): boolean {
   if (data.length === 0) return false;
   const firstRow = data[0];
   const keys = Object.keys(firstRow).map(k => k.toLowerCase());
 
-  // Look for key freight indicators
+  // Must have order ID
   const hasOrderId = keys.some(k => k.includes('order') || k.includes('订单'));
-  const hasShipping = keys.some(k => k.includes('shipping') || k.includes('freight') || k.includes('运费') || k.includes('物流'));
+  if (!hasOrderId) return false;
 
-  return hasOrderId && hasShipping;
+  // Must have INTERNATIONAL shipping (not just "shipping" or "freight")
+  // This excludes commodity sheets with "Domestic Freight" column
+  const hasInternationalShipping = keys.some(k =>
+    k.includes('international') ||
+    k.includes('国际')
+  );
+
+  // EXCLUDE if it has commodity-specific columns
+  const hasSKU = keys.some(k => k.includes('sku') || k.includes('货号'));
+  const hasPrice = keys.some(k => k.includes('price') && !k.includes('shipping'));
+  const hasTotal = keys.some(k => k.includes('total') || k.includes('合计'));
+
+  const isCommodity = hasSKU || (hasPrice && hasTotal);
+
+  // Bonus: Check for freight-specific indicators
+  const hasWeight = keys.some(k => k.includes('weight') || k.includes('重量'));
+  const hasServiceFee = keys.some(k => k.includes('service') && k.includes('fee'));
+
+  // It's a freight sheet if:
+  // 1. Has order ID
+  // 2. Has "International" in column names (or freight-specific columns)
+  // 3. Does NOT have commodity-specific columns
+  return hasOrderId &&
+         (hasInternationalShipping || hasWeight || hasServiceFee) &&
+         !isCommodity;
 }
 
 /**
@@ -81,14 +106,25 @@ export function parseInvoiceFile(fileBuffer: Buffer, uploadId: number): ParsedIn
 
     if (data.length === 0) continue;
 
+    // Log column names for debugging
+    const columnNames = Object.keys(data[0]);
+    console.log(`  Columns: ${columnNames.join(', ')}`);
+
     // Try to determine what type of sheet this is
     const isCommodity = isCommoditySheet(data);
     const isFreight = isFreightSheet(data);
 
-    console.log(`Sheet "${sheetName}": isCommodity=${isCommodity}, isFreight=${isFreight}`);
+    console.log(`  Detection: isCommodity=${isCommodity}, isFreight=${isFreight}`);
+
+    // CRITICAL: A sheet should never be BOTH commodity AND freight
+    if (isCommodity && isFreight) {
+      console.error(`⚠️  ERROR: Sheet "${sheetName}" detected as BOTH commodity and freight!`);
+      console.error(`  This should never happen. Treating as commodity only.`);
+    }
 
     if (isCommodity) {
       // Parse as commodity sheet
+      console.log(`  Parsing as COMMODITY sheet`);
       for (const row of data) {
         const orderNumber = String(
           findColumn(row, ['Order ID', 'OrderID', 'order id', 'order_id', '订单号', '订单编号', 'Order Number']) || ''
@@ -123,8 +159,9 @@ export function parseInvoiceFile(fileBuffer: Buffer, uploadId: number): ParsedIn
       }
     }
 
-    if (isFreight) {
-      // Parse as freight sheet
+    if (isFreight && !isCommodity) {
+      // Parse as freight sheet (ONLY if not also detected as commodity)
+      console.log(`  Parsing as FREIGHT sheet`);
       let skippedRows = 0;
       let zeroCostRows = 0;
 
@@ -200,7 +237,14 @@ export function parseInvoiceFile(fileBuffer: Buffer, uploadId: number): ParsedIn
     }
   }
 
-  console.log(`Parsed ${commodityItems.length} commodity items and ${freightItems.length} freight items`);
+  console.log(`\n✅ Parsing complete:`);
+  console.log(`   📦 ${commodityItems.length} commodity items`);
+  console.log(`   ✈️  ${freightItems.length} freight items`);
+
+  if (freightItems.length === 0) {
+    console.log(`\n⚠️  No freight items found. This invoice only contains commodity data.`);
+    console.log(`   Orders from this invoice will NOT appear in profitability view.`);
+  }
 
   return {
     commodityItems,
