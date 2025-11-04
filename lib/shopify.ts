@@ -10,8 +10,8 @@ const shopify = shopifyApi({
   isEmbeddedApp: false,
 });
 
-// Helper function to make REST API calls
-export async function shopifyRestRequest(endpoint: string, method: string = 'GET', body?: any) {
+// Helper function to make REST API calls with pagination support
+export async function shopifyRestRequest(endpoint: string, method: string = 'GET', body?: any): Promise<{ data: any; linkHeader: string | null }> {
   const url = `https://${process.env.SHOPIFY_STORE_DOMAIN}/admin/api/${process.env.SHOPIFY_API_VERSION}${endpoint}`;
 
   const headers: HeadersInit = {
@@ -35,80 +35,130 @@ export async function shopifyRestRequest(endpoint: string, method: string = 'GET
     throw new Error(`Shopify API error: ${response.status} - ${errorText}`);
   }
 
-  return response.json();
+  const data = await response.json();
+  const linkHeader = response.headers.get('link');
+
+  return { data, linkHeader };
 }
 
 // Fetch all orders with pagination
 export async function fetchAllOrders(limit: number = 250) {
   let allOrders: any[] = [];
-  let hasNextPage = true;
-  let pageInfo: string | null = null;
+  let nextPageUrl: string | null = null;
+  let pageCount = 0;
 
-  while (hasNextPage) {
-    const endpoint = pageInfo
-      ? `/orders.json?limit=${limit}&page_info=${pageInfo}`
-      : `/orders.json?limit=${limit}&status=any`;
+  console.log('Starting to fetch all orders from Shopify...');
 
-    const data = await shopifyRestRequest(endpoint);
+  while (true) {
+    pageCount++;
+    const endpoint = nextPageUrl || `/orders.json?limit=${limit}&status=any`;
+
+    console.log(`Fetching page ${pageCount}...`);
+    const { data, linkHeader } = await shopifyRestRequest(endpoint);
 
     if (data.orders && data.orders.length > 0) {
       allOrders = allOrders.concat(data.orders);
+      console.log(`Page ${pageCount}: Got ${data.orders.length} orders. Total so far: ${allOrders.length}`);
 
-      // Check if there's a next page
-      const linkHeader = data.link;
-      if (linkHeader && linkHeader.includes('rel="next"')) {
-        // Extract page_info from link header
-        const nextMatch = linkHeader.match(/page_info=([^&>]+)/);
-        pageInfo = nextMatch ? nextMatch[1] : null;
-        hasNextPage = !!pageInfo;
+      // Parse Link header for next page
+      if (linkHeader) {
+        const links = linkHeader.split(',');
+        const nextLink = links.find(link => link.includes('rel="next"'));
+
+        if (nextLink) {
+          // Extract URL from <url>; rel="next"
+          const urlMatch = nextLink.match(/<([^>]+)>/);
+          if (urlMatch && urlMatch[1]) {
+            // Extract just the path and query from the full URL
+            const fullUrl = urlMatch[1];
+            const pathMatch = fullUrl.match(/\/admin\/api\/[^/]+(.+)/);
+            nextPageUrl = pathMatch ? pathMatch[1] : null;
+          } else {
+            nextPageUrl = null;
+          }
+        } else {
+          nextPageUrl = null;
+        }
       } else {
-        hasNextPage = false;
+        nextPageUrl = null;
+      }
+
+      // If no more pages or we got fewer results than the limit, we're done
+      if (!nextPageUrl || data.orders.length < limit) {
+        break;
       }
     } else {
-      hasNextPage = false;
+      console.log('No more orders found.');
+      break;
     }
+
+    // Add a small delay to avoid rate limiting
+    await new Promise(resolve => setTimeout(resolve, 500));
   }
 
+  console.log(`Finished fetching all orders. Total: ${allOrders.length}`);
   return allOrders;
 }
 
 // Fetch all products with pagination
 export async function fetchAllProducts(limit: number = 250) {
   let allProducts: any[] = [];
-  let hasNextPage = true;
-  let pageInfo: string | null = null;
+  let nextPageUrl: string | null = null;
+  let pageCount = 0;
 
-  while (hasNextPage) {
-    const endpoint = pageInfo
-      ? `/products.json?limit=${limit}&page_info=${pageInfo}`
-      : `/products.json?limit=${limit}`;
+  console.log('Starting to fetch all products from Shopify...');
 
-    const data = await shopifyRestRequest(endpoint);
+  while (true) {
+    pageCount++;
+    const endpoint = nextPageUrl || `/products.json?limit=${limit}`;
+
+    console.log(`Fetching page ${pageCount}...`);
+    const { data, linkHeader } = await shopifyRestRequest(endpoint);
 
     if (data.products && data.products.length > 0) {
       allProducts = allProducts.concat(data.products);
+      console.log(`Page ${pageCount}: Got ${data.products.length} products. Total so far: ${allProducts.length}`);
 
-      // Check if there's a next page
-      const linkHeader = data.link;
-      if (linkHeader && linkHeader.includes('rel="next"')) {
-        const nextMatch = linkHeader.match(/page_info=([^&>]+)/);
-        pageInfo = nextMatch ? nextMatch[1] : null;
-        hasNextPage = !!pageInfo;
+      // Parse Link header for next page
+      if (linkHeader) {
+        const links = linkHeader.split(',');
+        const nextLink = links.find(link => link.includes('rel="next"'));
+
+        if (nextLink) {
+          const urlMatch = nextLink.match(/<([^>]+)>/);
+          if (urlMatch && urlMatch[1]) {
+            const fullUrl = urlMatch[1];
+            const pathMatch = fullUrl.match(/\/admin\/api\/[^/]+(.+)/);
+            nextPageUrl = pathMatch ? pathMatch[1] : null;
+          } else {
+            nextPageUrl = null;
+          }
+        } else {
+          nextPageUrl = null;
+        }
       } else {
-        hasNextPage = false;
+        nextPageUrl = null;
+      }
+
+      if (!nextPageUrl || data.products.length < limit) {
+        break;
       }
     } else {
-      hasNextPage = false;
+      console.log('No more products found.');
+      break;
     }
+
+    await new Promise(resolve => setTimeout(resolve, 500));
   }
 
+  console.log(`Finished fetching all products. Total: ${allProducts.length}`);
   return allProducts;
 }
 
 // Fetch a single order by order number
 export async function fetchOrderByNumber(orderNumber: string) {
   try {
-    const data = await shopifyRestRequest(`/orders.json?name=${encodeURIComponent(orderNumber)}&status=any`);
+    const { data } = await shopifyRestRequest(`/orders.json?name=${encodeURIComponent(orderNumber)}&status=any`);
     return data.orders && data.orders.length > 0 ? data.orders[0] : null;
   } catch (error) {
     console.error(`Error fetching order ${orderNumber}:`, error);

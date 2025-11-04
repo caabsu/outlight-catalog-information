@@ -4,75 +4,167 @@ import { CommodityItem, FreightItem, ParsedInvoiceData } from './types';
 const CNY_TO_USD_RATE = parseFloat(process.env.CNY_TO_USD_RATE || '0.138');
 
 /**
+ * Fuzzy match column name - handles variations, case, and Chinese characters
+ */
+function findColumn(row: any, possibleNames: string[]): any {
+  const keys = Object.keys(row);
+
+  for (const name of possibleNames) {
+    // Try exact match first
+    if (row[name] !== undefined) return row[name];
+
+    // Try case-insensitive match
+    const lowerName = name.toLowerCase();
+    for (const key of keys) {
+      if (key.toLowerCase() === lowerName) return row[key];
+
+      // Try partial match (contains)
+      if (key.toLowerCase().includes(lowerName) || lowerName.includes(key.toLowerCase())) {
+        return row[key];
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Detect if a sheet is a commodity sheet based on column names
+ */
+function isCommoditySheet(data: any[]): boolean {
+  if (data.length === 0) return false;
+  const firstRow = data[0];
+  const keys = Object.keys(firstRow).map(k => k.toLowerCase());
+
+  // Look for key commodity indicators
+  const hasOrderId = keys.some(k => k.includes('order') || k.includes('订单'));
+  const hasTotal = keys.some(k => k.includes('total') || k.includes('合计') || k.includes('总'));
+  const hasPrice = keys.some(k => k.includes('price') || k.includes('价格') || k.includes('单价'));
+
+  return hasOrderId && (hasTotal || hasPrice);
+}
+
+/**
+ * Detect if a sheet is a freight sheet based on column names
+ */
+function isFreightSheet(data: any[]): boolean {
+  if (data.length === 0) return false;
+  const firstRow = data[0];
+  const keys = Object.keys(firstRow).map(k => k.toLowerCase());
+
+  // Look for key freight indicators
+  const hasOrderId = keys.some(k => k.includes('order') || k.includes('订单'));
+  const hasShipping = keys.some(k => k.includes('shipping') || k.includes('freight') || k.includes('运费') || k.includes('物流'));
+
+  return hasOrderId && hasShipping;
+}
+
+/**
  * Parse XLS/XLSX file and extract commodity and freight data
  */
 export function parseInvoiceFile(fileBuffer: Buffer, uploadId: number): ParsedInvoiceData {
-  const workbook = XLSX.read(fileBuffer, { type: 'buffer' });
+  const workbook = XLSX.read(fileBuffer, { type: 'buffer', cellDates: true });
 
   const commodityItems: CommodityItem[] = [];
   const freightItems: FreightItem[] = [];
 
-  // Parse "commodity" sheet
-  if (workbook.SheetNames.includes('commodity')) {
-    const commoditySheet = workbook.Sheets['commodity'];
-    const commodityData: any[] = XLSX.utils.sheet_to_json(commoditySheet, { defval: null });
+  console.log('Available sheets:', workbook.SheetNames);
 
-    for (const row of commodityData) {
-      // Skip empty rows
-      if (!row['Order ID'] && !row['order id'] && !row['OrderID']) continue;
+  // Check first 3 sheets for commodity and freight data
+  const sheetsToCheck = workbook.SheetNames.slice(0, 3);
 
-      const orderNumber = String(row['Order ID'] || row['order id'] || row['OrderID'] || '').trim();
-      if (!orderNumber) continue;
+  for (const sheetName of sheetsToCheck) {
+    const sheet = workbook.Sheets[sheetName];
+    const data: any[] = XLSX.utils.sheet_to_json(sheet, { defval: null, raw: false });
 
-      const priceCny = parseFloat(row['Price'] || row['price'] || 0);
-      const domesticFreightCny = parseFloat(row['Domestic Freight'] || row['domestic freight'] || 0);
-      const totalCny = parseFloat(row['Total'] || row['total'] || 0);
+    console.log(`Checking sheet "${sheetName}" with ${data.length} rows`);
 
-      const item: CommodityItem = {
-        upload_id: uploadId,
-        time: parseExcelDate(row['Time'] || row['time']),
-        order_number: orderNumber,
-        sku: row['SKU'] || row['sku'] || null,
-        price_cny: priceCny,
-        price_usd: priceCny * CNY_TO_USD_RATE,
-        domestic_freight_cny: domesticFreightCny,
-        domestic_freight_usd: domesticFreightCny * CNY_TO_USD_RATE,
-        total_cny: totalCny,
-        total_usd: totalCny * CNY_TO_USD_RATE,
-      };
+    if (data.length === 0) continue;
 
-      commodityItems.push(item);
+    // Try to determine what type of sheet this is
+    const isCommodity = isCommoditySheet(data);
+    const isFreight = isFreightSheet(data);
+
+    console.log(`Sheet "${sheetName}": isCommodity=${isCommodity}, isFreight=${isFreight}`);
+
+    if (isCommodity) {
+      // Parse as commodity sheet
+      for (const row of data) {
+        const orderNumber = String(
+          findColumn(row, ['Order ID', 'OrderID', 'order id', 'order_id', '订单号', '订单编号', 'Order Number']) || ''
+        ).trim();
+
+        if (!orderNumber) continue;
+
+        const priceCny = parseFloat(
+          findColumn(row, ['Price', 'price', 'Unit Price', 'unit price', '单价', '价格']) || 0
+        );
+        const domesticFreightCny = parseFloat(
+          findColumn(row, ['Domestic Freight', 'domestic freight', 'Domestic Shipping', '国内运费', '国内物流']) || 0
+        );
+        const totalCny = parseFloat(
+          findColumn(row, ['Total', 'total', 'Amount', 'amount', '合计', '总计', '总金额', '总价']) || 0
+        );
+
+        const item: CommodityItem = {
+          upload_id: uploadId,
+          time: parseExcelDate(findColumn(row, ['Time', 'time', 'Date', 'date', '时间', '日期'])),
+          order_number: orderNumber,
+          sku: findColumn(row, ['SKU', 'sku', 'Sku', '货号', '商品编号']) || null,
+          price_cny: priceCny,
+          price_usd: priceCny * CNY_TO_USD_RATE,
+          domestic_freight_cny: domesticFreightCny,
+          domestic_freight_usd: domesticFreightCny * CNY_TO_USD_RATE,
+          total_cny: totalCny,
+          total_usd: totalCny * CNY_TO_USD_RATE,
+        };
+
+        commodityItems.push(item);
+      }
+    }
+
+    if (isFreight) {
+      // Parse as freight sheet
+      for (const row of data) {
+        const orderNumber = String(
+          findColumn(row, ['Order ID', 'OrderID', 'order id', 'order_id', '订单号', '订单编号', 'Order Number']) || ''
+        ).trim();
+
+        if (!orderNumber) continue;
+
+        const internationalShippingCny = parseFloat(
+          findColumn(row, [
+            'International Shipping',
+            'international shipping',
+            'Int Shipping',
+            'Shipping',
+            'Freight',
+            '国际运费',
+            '国际物流',
+            '运费'
+          ]) || 0
+        );
+
+        const serviceFee = parseFloat(
+          findColumn(row, ['Service Fee', 'service fee', 'Fee', 'fee', '服务费']) || 15
+        );
+
+        const item: FreightItem = {
+          upload_id: uploadId,
+          time: parseExcelDate(findColumn(row, ['Time', 'time', 'Date', 'date', '时间', '日期'])),
+          order_number: orderNumber,
+          weight: parseFloat(findColumn(row, ['Weight', 'weight', '重量']) || 0) || undefined,
+          international_shipping_cny: internationalShippingCny,
+          international_shipping_usd: internationalShippingCny * CNY_TO_USD_RATE,
+          service_fee_usd: serviceFee,
+        };
+
+        freightItems.push(item);
+      }
     }
   }
 
-  // Parse "freight" sheet
-  if (workbook.SheetNames.includes('freight')) {
-    const freightSheet = workbook.Sheets['freight'];
-    const freightData: any[] = XLSX.utils.sheet_to_json(freightSheet, { defval: null });
-
-    for (const row of freightData) {
-      // Skip empty rows
-      if (!row['Order ID'] && !row['order id'] && !row['OrderID']) continue;
-
-      const orderNumber = String(row['Order ID'] || row['order id'] || row['OrderID'] || '').trim();
-      if (!orderNumber) continue;
-
-      const internationalShippingCny = parseFloat(row['International Shipping'] || row['international shipping'] || 0);
-      const serviceFee = parseFloat(row['Service Fee'] || row['service fee'] || 15);
-
-      const item: FreightItem = {
-        upload_id: uploadId,
-        time: parseExcelDate(row['Time'] || row['time']),
-        order_number: orderNumber,
-        weight: parseFloat(row['Weight'] || row['weight'] || 0) || undefined,
-        international_shipping_cny: internationalShippingCny,
-        international_shipping_usd: internationalShippingCny * CNY_TO_USD_RATE,
-        service_fee_usd: serviceFee,
-      };
-
-      freightItems.push(item);
-    }
-  }
+  console.log(`Parsed ${commodityItems.length} commodity items and ${freightItems.length} freight items`);
 
   return {
     commodityItems,
@@ -107,7 +199,7 @@ function parseExcelDate(value: any): string {
 }
 
 /**
- * Validate XLS file structure
+ * Validate XLS file structure - now very lenient
  */
 export function validateInvoiceFile(fileBuffer: Buffer): { valid: boolean; errors: string[] } {
   const errors: string[] = [];
@@ -115,52 +207,27 @@ export function validateInvoiceFile(fileBuffer: Buffer): { valid: boolean; error
   try {
     const workbook = XLSX.read(fileBuffer, { type: 'buffer' });
 
-    // Check for required sheets
-    if (!workbook.SheetNames.includes('commodity')) {
-      errors.push('Missing required sheet: "commodity"');
+    if (workbook.SheetNames.length === 0) {
+      errors.push('File contains no sheets');
+      return { valid: false, errors };
     }
 
-    if (!workbook.SheetNames.includes('freight')) {
-      errors.push('Missing required sheet: "freight"');
-    }
-
-    // Validate commodity sheet columns
-    if (workbook.SheetNames.includes('commodity')) {
-      const commoditySheet = workbook.Sheets['commodity'];
-      const commodityData: any[] = XLSX.utils.sheet_to_json(commoditySheet, { defval: null });
-
-      if (commodityData.length === 0) {
-        errors.push('Commodity sheet is empty');
-      } else {
-        const firstRow = commodityData[0];
-        const requiredColumns = ['Order ID', 'Total'];
-
-        for (const col of requiredColumns) {
-          if (!(col in firstRow) && !(col.toLowerCase() in firstRow)) {
-            errors.push(`Missing required column in commodity sheet: "${col}"`);
-          }
-        }
+    // Check if at least one sheet has data
+    let hasAnyData = false;
+    for (const sheetName of workbook.SheetNames.slice(0, 3)) {
+      const sheet = workbook.Sheets[sheetName];
+      const data: any[] = XLSX.utils.sheet_to_json(sheet, { defval: null });
+      if (data.length > 0) {
+        hasAnyData = true;
+        break;
       }
     }
 
-    // Validate freight sheet columns
-    if (workbook.SheetNames.includes('freight')) {
-      const freightSheet = workbook.Sheets['freight'];
-      const freightData: any[] = XLSX.utils.sheet_to_json(freightSheet, { defval: null });
-
-      if (freightData.length === 0) {
-        errors.push('Freight sheet is empty');
-      } else {
-        const firstRow = freightData[0];
-        const requiredColumns = ['Order ID'];
-
-        for (const col of requiredColumns) {
-          if (!(col in firstRow) && !(col.toLowerCase() in firstRow)) {
-            errors.push(`Missing required column in freight sheet: "${col}"`);
-          }
-        }
-      }
+    if (!hasAnyData) {
+      errors.push('File contains no parseable data in the first 3 sheets');
     }
+
+    // Don't validate specific columns - let the parser handle it
   } catch (error: any) {
     errors.push(`Error parsing file: ${error.message}`);
   }

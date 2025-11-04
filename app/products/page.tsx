@@ -82,13 +82,13 @@ export default function ProductsPage() {
                     Units Sold
                   </th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Avg Selling Price
+                    Customer Paid<br /><span className="text-xs font-normal text-gray-400">(after discount)</span>
                   </th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Avg Unit Cost
+                    Unit Cost<br /><span className="text-xs font-normal text-gray-400">(our cost)</span>
                   </th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Avg Profit/Unit
+                    Profit/Unit
                   </th>
                 </tr>
               </thead>
@@ -110,10 +110,15 @@ export default function ProductsPage() {
                       {product.total_quantity_sold || 0}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
-                      ${product.avg_selling_price_usd?.toFixed(2) || '0.00'}
+                      <div className="font-semibold">${product.avg_selling_price_usd?.toFixed(2) || '0.00'}</div>
+                      {product.avg_listed_price_usd && product.avg_listed_price_usd !== product.avg_selling_price_usd && (
+                        <div className="text-xs text-gray-500 line-through">
+                          ${product.avg_listed_price_usd.toFixed(2)}
+                        </div>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
-                      <div>${product.avg_unit_cost_usd?.toFixed(2) || '0.00'}</div>
+                      <div className="font-semibold">${product.avg_unit_cost_usd?.toFixed(2) || '0.00'}</div>
                       <div className="text-xs text-gray-500">
                         ¥{product.avg_unit_cost_cny?.toFixed(2) || '0.00'}
                       </div>

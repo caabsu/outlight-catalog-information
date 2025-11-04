@@ -119,7 +119,9 @@ export interface ProductCostAnalysis {
   product_title: string;
   order_count: number;
   total_quantity_sold: number;
-  avg_selling_price_usd: number;
+  avg_listed_price_usd: number;  // Price before discounts
+  avg_selling_price_usd: number;  // Actual customer payment after discounts
+  total_revenue_usd: number;  // Total revenue from this product
   avg_unit_cost_usd: number;
   avg_unit_cost_cny: number;
   avg_profit_per_unit_usd: number;
