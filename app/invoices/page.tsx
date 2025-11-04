@@ -38,6 +38,13 @@ export default function InvoicesPage() {
 
   useEffect(() => {
     fetchInvoices();
+
+    // Check for invoice ID in query params
+    const params = new URLSearchParams(window.location.search);
+    const invoiceId = params.get('id');
+    if (invoiceId) {
+      fetchInvoiceDetails(parseInt(invoiceId));
+    }
   }, []);
 
   async function fetchInvoices() {

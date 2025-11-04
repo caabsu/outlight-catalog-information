@@ -13,28 +13,39 @@ WITH order_costs AS (
         SUM(COALESCE(ic.price_usd, 0)) as total_commodity_price_usd,
         SUM(COALESCE(ic.domestic_freight_usd, 0)) as total_domestic_freight_usd,
         SUM(COALESCE(ic.total_usd, 0)) as total_commodity_cost_usd,
-        COUNT(*) as invoice_line_count
+        COUNT(*) as invoice_line_count,
+        -- Get all unique invoice IDs and filenames for this order
+        array_agg(DISTINCT ic.upload_id) as commodity_upload_ids,
+        array_agg(DISTINCT iu.filename) FILTER (WHERE iu.filename IS NOT NULL) as commodity_invoice_files,
+        array_agg(DISTINCT iu.id) FILTER (WHERE iu.id IS NOT NULL) as commodity_invoice_ids
     FROM invoice_commodity_items ic
+    LEFT JOIN invoice_uploads iu ON ic.upload_id = iu.id
     WHERE ic.order_number IS NOT NULL AND ic.order_number != ''
     GROUP BY REPLACE(ic.order_number, '#', '')
 ),
 order_freight AS (
     -- Strip # from freight order numbers and use International Shipping column
     SELECT
-        REPLACE(order_number, '#', '') as order_number,
-        SUM(COALESCE(international_shipping_usd, 0)) as total_intl_shipping_usd,
-        SUM(COALESCE(service_fee_usd, 0)) as total_service_fee_usd
-    FROM invoice_freight_items
-    WHERE order_number IS NOT NULL AND order_number != ''
-    GROUP BY REPLACE(order_number, '#', '')
+        REPLACE(if_items.order_number, '#', '') as order_number,
+        SUM(COALESCE(if_items.international_shipping_usd, 0)) as total_intl_shipping_usd,
+        SUM(COALESCE(if_items.service_fee_usd, 0)) as total_service_fee_usd,
+        -- Get all unique invoice IDs and filenames for this order
+        array_agg(DISTINCT if_items.upload_id) as freight_upload_ids,
+        array_agg(DISTINCT iu.filename) FILTER (WHERE iu.filename IS NOT NULL) as freight_invoice_files,
+        array_agg(DISTINCT iu.id) FILTER (WHERE iu.id IS NOT NULL) as freight_invoice_ids
+    FROM invoice_freight_items if_items
+    LEFT JOIN invoice_uploads iu ON if_items.upload_id = iu.id
+    WHERE if_items.order_number IS NOT NULL AND if_items.order_number != ''
+    GROUP BY REPLACE(if_items.order_number, '#', '')
 ),
 orders_with_complete_data AS (
     -- CRITICAL: Only orders that appear in BOTH commodity AND freight
+    -- AND have non-zero international shipping fees
     SELECT DISTINCT oc.order_number
     FROM order_costs oc
     INNER JOIN order_freight of ON oc.order_number = of.order_number
     WHERE oc.total_commodity_cost_usd > 0
-      AND of.total_intl_shipping_usd >= 0  -- Can be 0, but must exist
+      AND of.total_intl_shipping_usd > 0  -- Must have non-zero international shipping
 ),
 order_total_costs AS (
     -- Only include orders with complete data
@@ -49,7 +60,12 @@ order_total_costs AS (
         oc.total_commodity_cost_usd +
         of.total_intl_shipping_usd +
         of.total_service_fee_usd as total_order_cost_usd,
-        true as has_complete_data  -- Flag for easy filtering
+        true as has_complete_data,  -- Flag for easy filtering
+        -- Invoice source tracking
+        oc.commodity_invoice_files,
+        oc.commodity_invoice_ids,
+        of.freight_invoice_files,
+        of.freight_invoice_ids
     FROM order_costs oc
     INNER JOIN order_freight of ON oc.order_number = of.order_number
     WHERE oc.order_number IN (SELECT order_number FROM orders_with_complete_data)
@@ -104,6 +120,10 @@ estimated_item_costs AS (
         otc.order_service_fee_usd,
         otc.total_order_cost_usd,
         otc.has_complete_data,
+        otc.commodity_invoice_files,
+        otc.commodity_invoice_ids,
+        otc.freight_invoice_files,
+        otc.freight_invoice_ids,
 
         CASE
             WHEN od.order_total_revenue > 0 THEN

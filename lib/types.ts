@@ -161,6 +161,12 @@ export interface ItemCostAnalysis {
   cost_confidence_score: number;
   cost_data_source: string;
 
+  // Invoice source tracking
+  commodity_invoice_files?: string[];
+  commodity_invoice_ids?: number[];
+  freight_invoice_files?: string[];
+  freight_invoice_ids?: number[];
+
   // Profitability
   profit_per_unit_usd?: number;
   total_line_profit_usd?: number;
