@@ -13,6 +13,9 @@ export async function GET(request: NextRequest) {
 
     if (orderNumber) {
       query = query.eq('order_number', orderNumber);
+    } else {
+      // Explicitly set a very high limit to fetch all orders
+      query = query.limit(100000);
     }
 
     const { data, error, count } = await query;

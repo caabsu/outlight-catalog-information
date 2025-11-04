@@ -13,6 +13,9 @@ export async function GET(request: NextRequest) {
 
     if (sku) {
       query = query.eq('sku', sku);
+    } else {
+      // Explicitly set a very high limit to fetch all products
+      query = query.limit(100000);
     }
 
     const { data, error, count } = await query;
