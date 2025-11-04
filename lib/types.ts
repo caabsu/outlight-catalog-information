@@ -217,9 +217,17 @@ export interface ProductProfitabilitySummary {
   avg_selling_price_usd: number;
   total_revenue_usd: number;
 
-  // Cost metrics
+  // Cost metrics - with breakdown
   avg_estimated_cost_usd: number;
+  avg_commodity_price_per_unit?: number;
+  avg_domestic_freight_per_unit?: number;
+  avg_intl_shipping_per_unit?: number;
+  avg_service_fee_per_unit?: number;
   total_estimated_cost_usd: number;
+  total_commodity_cost_usd?: number;
+  total_domestic_freight_usd?: number;
+  total_intl_shipping_usd?: number;
+  total_service_fee_usd?: number;
   avg_confidence_score: number;
 
   // Profitability
@@ -228,8 +236,8 @@ export interface ProductProfitabilitySummary {
   overall_profit_margin_pct: number;
 
   // Data quality
-  avg_clean_invoice_count: number;
-  instances_with_clean_data: number;
+  instances_single_sku: number;
+  instances_multi_sku: number;
   instances_no_data: number;
 }
 

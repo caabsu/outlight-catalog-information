@@ -371,8 +371,24 @@ export default function ItemsPage() {
                       <td className="px-6 py-4 text-right text-sm font-medium text-gray-900">
                         ${product.total_revenue_usd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </td>
-                      <td className="px-6 py-4 text-right text-sm text-gray-600">
-                        ${product.avg_estimated_cost_usd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      <td className="px-6 py-4 text-right">
+                        <div className="text-sm font-medium text-gray-900">
+                          ${product.avg_estimated_cost_usd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </div>
+                        <div className="text-xs text-gray-500 mt-1 space-y-0.5">
+                          {product.avg_commodity_price_per_unit && (
+                            <div>📦 Commodity: ${product.avg_commodity_price_per_unit.toFixed(2)}</div>
+                          )}
+                          {product.avg_domestic_freight_per_unit && product.avg_domestic_freight_per_unit > 0 && (
+                            <div>🚛 Domestic: ${product.avg_domestic_freight_per_unit.toFixed(2)}</div>
+                          )}
+                          {product.avg_intl_shipping_per_unit && product.avg_intl_shipping_per_unit > 0 && (
+                            <div>✈️ Intl Ship: ${product.avg_intl_shipping_per_unit.toFixed(2)}</div>
+                          )}
+                          {product.avg_service_fee_per_unit && product.avg_service_fee_per_unit > 0 && (
+                            <div>💵 Service: ${product.avg_service_fee_per_unit.toFixed(2)}</div>
+                          )}
+                        </div>
                       </td>
                       <td className={`px-6 py-4 text-right text-sm font-medium ${
                         product.total_profit_usd >= 0 ? 'text-green-600' : 'text-red-600'
@@ -452,8 +468,24 @@ export default function ItemsPage() {
                                       <td className="px-6 py-3 text-right text-sm text-gray-700">
                                         ${sku.total_revenue_usd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                       </td>
-                                      <td className="px-6 py-3 text-right text-sm text-gray-600">
-                                        ${sku.avg_estimated_cost_usd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                      <td className="px-6 py-3 text-right">
+                                        <div className="text-sm font-medium text-gray-700">
+                                          ${sku.avg_estimated_cost_usd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                        </div>
+                                        <div className="text-xs text-gray-500 mt-0.5 space-y-0.5">
+                                          {sku.avg_commodity_price_usd && (
+                                            <div>📦 ${sku.avg_commodity_price_usd.toFixed(2)}</div>
+                                          )}
+                                          {sku.avg_domestic_freight_usd && sku.avg_domestic_freight_usd > 0 && (
+                                            <div>🚛 ${sku.avg_domestic_freight_usd.toFixed(2)}</div>
+                                          )}
+                                          {sku.avg_intl_shipping_per_unit_usd && sku.avg_intl_shipping_per_unit_usd > 0 && (
+                                            <div>✈️ ${sku.avg_intl_shipping_per_unit_usd.toFixed(2)}</div>
+                                          )}
+                                          {sku.avg_service_fee_per_unit_usd && sku.avg_service_fee_per_unit_usd > 0 && (
+                                            <div>💵 ${sku.avg_service_fee_per_unit_usd.toFixed(2)}</div>
+                                          )}
+                                        </div>
                                       </td>
                                       <td className={`px-6 py-3 text-right text-sm font-medium ${
                                         sku.total_profit_usd >= 0 ? 'text-green-600' : 'text-red-600'
