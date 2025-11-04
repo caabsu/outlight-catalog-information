@@ -35,6 +35,8 @@ export default function InvoicesPage() {
   const [selectedInvoice, setSelectedInvoice] = useState<number | null>(null);
   const [invoiceDetails, setInvoiceDetails] = useState<InvoiceDetails | null>(null);
   const [loadingDetails, setLoadingDetails] = useState(false);
+  const [selectedInvoices, setSelectedInvoices] = useState<Set<number>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   useEffect(() => {
     fetchInvoices();
@@ -111,6 +113,75 @@ export default function InvoicesPage() {
     }
   }
 
+  function toggleInvoiceSelection(id: number) {
+    setSelectedInvoices(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    if (selectedInvoices.size === invoices.length) {
+      setSelectedInvoices(new Set());
+    } else {
+      setSelectedInvoices(new Set(invoices.map(inv => inv.id)));
+    }
+  }
+
+  async function bulkDeleteInvoices() {
+    if (selectedInvoices.size === 0) {
+      alert('Please select at least one invoice to delete.');
+      return;
+    }
+
+    const count = selectedInvoices.size;
+    if (!confirm(`Are you sure you want to delete ${count} invoice${count > 1 ? 's' : ''}?\n\nThis will remove all cost data from these invoices and update your analysis.`)) {
+      return;
+    }
+
+    setBulkDeleting(true);
+    let successCount = 0;
+    let failCount = 0;
+
+    try {
+      for (const id of selectedInvoices) {
+        try {
+          const res = await fetch(`/api/invoices?id=${id}`, {
+            method: 'DELETE',
+          });
+          const data = await res.json();
+          if (data.success) {
+            successCount++;
+          } else {
+            failCount++;
+          }
+        } catch (error) {
+          failCount++;
+        }
+      }
+
+      // Refresh invoice list
+      await fetchInvoices();
+      setSelectedInvoices(new Set());
+
+      if (failCount === 0) {
+        alert(`✅ Successfully deleted ${successCount} invoice${successCount > 1 ? 's' : ''}!`);
+      } else {
+        alert(`Deleted ${successCount} invoice${successCount > 1 ? 's' : ''}, but ${failCount} failed.`);
+      }
+    } catch (error: any) {
+      console.error('Error during bulk delete:', error);
+      alert('Error during bulk delete: ' + error.message);
+    } finally {
+      setBulkDeleting(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -132,6 +203,51 @@ export default function InvoicesPage() {
         </button>
       </div>
 
+      {/* Bulk Actions Bar */}
+      {!loading && invoices.length > 0 && (
+        <div className="bg-white rounded-lg shadow p-4 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={selectedInvoices.size === invoices.length && invoices.length > 0}
+                onChange={toggleSelectAll}
+                className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+              />
+              <span className="text-sm font-medium text-gray-700">
+                Select All ({selectedInvoices.size} selected)
+              </span>
+            </label>
+          </div>
+          <button
+            onClick={bulkDeleteInvoices}
+            disabled={selectedInvoices.size === 0 || bulkDeleting}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${
+              selectedInvoices.size === 0 || bulkDeleting
+                ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                : 'bg-red-600 text-white hover:bg-red-700'
+            }`}
+          >
+            {bulkDeleting ? (
+              <>
+                <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Deleting...
+              </>
+            ) : (
+              <>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+                Delete Selected ({selectedInvoices.size})
+              </>
+            )}
+          </button>
+        </div>
+      )}
+
       {/* Invoices Table */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
         {loading ? (
@@ -151,6 +267,14 @@ export default function InvoicesPage() {
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
+                  <th className="w-12 px-6 py-3 text-center">
+                    <input
+                      type="checkbox"
+                      checked={selectedInvoices.size === invoices.length}
+                      onChange={toggleSelectAll}
+                      className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                    />
+                  </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Filename
                   </th>
@@ -174,6 +298,15 @@ export default function InvoicesPage() {
               <tbody className="bg-white divide-y divide-gray-200">
                 {invoices.map((invoice) => (
                   <tr key={invoice.id} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-6 py-4 text-center">
+                      <input
+                        type="checkbox"
+                        checked={selectedInvoices.has(invoice.id)}
+                        onChange={() => toggleInvoiceSelection(invoice.id)}
+                        onClick={(e) => e.stopPropagation()}
+                        className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                      />
+                    </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center">
                         <svg className="w-5 h-5 text-green-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
