@@ -172,11 +172,12 @@ export default function ItemsPage() {
           <div className="ml-3">
             <h3 className="text-sm font-medium text-blue-800">How Cost Estimation Works</h3>
             <div className="mt-2 text-sm text-blue-700">
+              <p className="mb-2"><strong>Only items with actual invoice data are shown.</strong> No estimates or fallbacks.</p>
               <ul className="list-disc list-inside space-y-1">
                 <li><strong>Direct SKU Match (95% confidence):</strong> Average cost from 3+ invoices with this SKU</li>
-                <li><strong>Direct SKU Match (70-85% confidence):</strong> Average cost from 1-2 invoices with this SKU</li>
-                <li><strong>Order Allocation (50% confidence):</strong> Total order cost divided proportionally</li>
-                <li><strong>Estimated (20% confidence):</strong> 60% of selling price used as fallback</li>
+                <li><strong>Direct SKU Match (85% confidence):</strong> Average cost from 2 invoices with this SKU</li>
+                <li><strong>Direct SKU Match (70% confidence):</strong> Average cost from 1 invoice with this SKU</li>
+                <li><strong>Order Allocation (50% confidence):</strong> Order cost divided proportionally when SKU not in invoice</li>
               </ul>
             </div>
           </div>
@@ -411,13 +412,10 @@ export default function ItemsPage() {
                       <td className="px-6 py-4 whitespace-nowrap text-center text-xs">
                         <div className="space-y-1">
                           {item.instances_with_invoice_data > 0 && (
-                            <div className="text-green-600">📄 {item.instances_with_invoice_data} invoice{item.instances_with_invoice_data > 1 ? 's' : ''}</div>
+                            <div className="text-green-600 font-medium">📄 {item.instances_with_invoice_data} direct</div>
                           )}
                           {item.instances_with_order_data > 0 && (
-                            <div className="text-blue-600">📦 {item.instances_with_order_data} order{item.instances_with_order_data > 1 ? 's' : ''}</div>
-                          )}
-                          {item.instances_estimated > 0 && (
-                            <div className="text-gray-500">📊 {item.instances_estimated} est.</div>
+                            <div className="text-blue-600">📦 {item.instances_with_order_data} allocated</div>
                           )}
                         </div>
                       </td>

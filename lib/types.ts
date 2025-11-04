@@ -190,7 +190,7 @@ export interface SKUProfitabilitySummary {
   // Data quality indicators
   instances_with_invoice_data: number;
   instances_with_order_data: number;
-  instances_estimated: number;
+  instances_no_data: number;
 
   // Price ranges
   min_selling_price_usd: number;

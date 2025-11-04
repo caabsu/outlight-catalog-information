@@ -93,7 +93,7 @@ estimated_item_costs AS (
         olc.total_freight_cost,
         olc.total_service_fee,
 
-        -- Best estimate for unit cost
+        -- Best estimate for unit cost (ONLY from actual invoice data)
         COALESCE(
             -- Priority 1: Use direct SKU average from invoices
             sac.avg_total_cost_usd / NULLIF(lid.quantity, 0),
@@ -102,9 +102,7 @@ estimated_item_costs AS (
                 WHEN olc.total_commodity_cost > 0 THEN
                     (olc.total_commodity_cost / NULLIF(lid.quantity, 0))
                 ELSE NULL
-            END,
-            -- Priority 3: Use a default cost ratio (e.g., 60% of selling price)
-            lid.actual_unit_price_usd * 0.60
+            END
         ) as estimated_unit_cost_usd,
 
         -- Confidence score for the estimate (0-100)
@@ -113,14 +111,14 @@ estimated_item_costs AS (
             WHEN sac.avg_total_cost_usd IS NOT NULL AND sac.invoice_count >= 2 THEN 85
             WHEN sac.avg_total_cost_usd IS NOT NULL THEN 70
             WHEN olc.total_commodity_cost > 0 THEN 50
-            ELSE 20
+            ELSE 0
         END as cost_confidence_score,
 
         -- Data source indicator
         CASE
             WHEN sac.avg_total_cost_usd IS NOT NULL THEN 'Direct SKU Match'
             WHEN olc.total_commodity_cost > 0 THEN 'Order Allocation'
-            ELSE 'Estimated (60% ratio)'
+            ELSE 'No Invoice Data'
         END as cost_data_source
 
     FROM line_item_details lid
@@ -148,6 +146,7 @@ ORDER BY eic.order_date DESC, eic.sku;
 
 
 -- SKU summary view - aggregates all instances of each SKU
+-- ONLY includes SKUs with actual invoice data (no estimates)
 CREATE OR REPLACE VIEW sku_profitability_summary AS
 SELECT
     sku,
@@ -172,7 +171,7 @@ SELECT
     -- Invoice data availability
     COUNT(CASE WHEN cost_data_source = 'Direct SKU Match' THEN 1 END) as instances_with_invoice_data,
     COUNT(CASE WHEN cost_data_source = 'Order Allocation' THEN 1 END) as instances_with_order_data,
-    COUNT(CASE WHEN cost_data_source = 'Estimated (60% ratio)' THEN 1 END) as instances_estimated,
+    COUNT(CASE WHEN cost_data_source = 'No Invoice Data' THEN 1 END) as instances_no_data,
 
     -- Price ranges
     MIN(actual_unit_price_usd) as min_selling_price_usd,
@@ -182,5 +181,7 @@ SELECT
 
 FROM item_cost_analysis
 WHERE sku IS NOT NULL AND sku != ''
+  AND cost_data_source != 'No Invoice Data'  -- ONLY include items with actual invoice data
+  AND estimated_unit_cost_usd IS NOT NULL    -- Must have a valid cost estimate
 GROUP BY sku, product_title
 ORDER BY total_revenue_usd DESC;
