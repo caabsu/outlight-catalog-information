@@ -4,12 +4,24 @@ import { useEffect, useState } from 'react';
 import { OrderCostAnalysis } from '@/lib/types';
 import { format } from 'date-fns';
 
+type TabType = 'all' | 'profitable' | 'low-margin' | 'recent';
+type SortField = 'order_date' | 'profit_percentage' | 'total_fulfillment_cost_usd';
+type SortOrder = 'asc' | 'desc';
+
 export default function OrdersPage() {
   const [orders, setOrders] = useState<OrderCostAnalysis[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedOrder, setSelectedOrder] = useState<string | null>(null);
   const [orderDetails, setOrderDetails] = useState<any>(null);
+
+  // Filters and pagination
+  const [activeTab, setActiveTab] = useState<TabType>('all');
+  const [sortField, setSortField] = useState<SortField>('order_date');
+  const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(25);
+  const [dateFilter, setDateFilter] = useState<string>('all'); // all, today, week, month
 
   useEffect(() => {
     fetchOrders();
@@ -45,35 +57,206 @@ export default function OrdersPage() {
     }
   }
 
-  const filteredOrders = orders.filter(order =>
-    order.order_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    order.order_name?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // Filter orders based on active tab
+  const getFilteredOrders = () => {
+    let filtered = [...orders];
+
+    // Tab filter
+    switch (activeTab) {
+      case 'profitable':
+        filtered = filtered.filter(o => (o.profit_percentage || 0) >= 30);
+        break;
+      case 'low-margin':
+        filtered = filtered.filter(o => (o.profit_percentage || 0) < 15);
+        break;
+      case 'recent':
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+        filtered = filtered.filter(o => new Date(o.order_date) >= sevenDaysAgo);
+        break;
+    }
+
+    // Date filter
+    if (dateFilter !== 'all') {
+      const now = new Date();
+      const filterDate = new Date();
+
+      switch (dateFilter) {
+        case 'today':
+          filterDate.setHours(0, 0, 0, 0);
+          break;
+        case 'week':
+          filterDate.setDate(now.getDate() - 7);
+          break;
+        case 'month':
+          filterDate.setMonth(now.getMonth() - 1);
+          break;
+      }
+
+      filtered = filtered.filter(o => new Date(o.order_date) >= filterDate);
+    }
+
+    // Search filter
+    if (searchTerm) {
+      filtered = filtered.filter(order =>
+        order.order_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        order.order_name?.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+
+    // Sort
+    filtered.sort((a, b) => {
+      const aVal = a[sortField] || 0;
+      const bVal = b[sortField] || 0;
+
+      if (sortField === 'order_date') {
+        return sortOrder === 'asc'
+          ? new Date(aVal).getTime() - new Date(bVal).getTime()
+          : new Date(bVal).getTime() - new Date(aVal).getTime();
+      }
+
+      return sortOrder === 'asc' ? (aVal > bVal ? 1 : -1) : (bVal > aVal ? 1 : -1);
+    });
+
+    return filtered;
+  };
+
+  const filteredOrders = getFilteredOrders();
+
+  // Pagination
+  const totalPages = Math.ceil(filteredOrders.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedOrders = filteredOrders.slice(startIndex, endIndex);
 
   const getProfitColor = (profitPercentage: number) => {
-    if (profitPercentage >= 30) return 'text-green-600';
-    if (profitPercentage >= 15) return 'text-yellow-600';
-    return 'text-red-600';
+    if (profitPercentage >= 30) return 'text-emerald-600 bg-emerald-50';
+    if (profitPercentage >= 15) return 'text-amber-600 bg-amber-50';
+    return 'text-red-600 bg-red-50';
+  };
+
+  const getProfitBadge = (profitPercentage: number) => {
+    if (profitPercentage >= 30) return { label: 'High', color: 'bg-emerald-500' };
+    if (profitPercentage >= 15) return { label: 'Medium', color: 'bg-amber-500' };
+    return { label: 'Low', color: 'bg-red-500' };
   };
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900">Orders Analysis</h1>
-        <p className="mt-2 text-gray-600">
-          View detailed cost breakdown and profit margins for each order
-        </p>
+      {/* Header */}
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Orders Analysis</h1>
+          <p className="mt-2 text-gray-600">
+            {filteredOrders.length} orders • ${filteredOrders.reduce((sum, o) => sum + (o.shopify_total_usd || 0), 0).toFixed(2)} total revenue
+          </p>
+        </div>
+        <button
+          onClick={fetchOrders}
+          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          Refresh
+        </button>
       </div>
 
-      {/* Search */}
+      {/* Tabs */}
+      <div className="border-b border-gray-200">
+        <nav className="-mb-px flex space-x-8">
+          {[
+            { id: 'all', label: 'All Orders', count: orders.length },
+            { id: 'profitable', label: 'High Profit (30%+)', count: orders.filter(o => (o.profit_percentage || 0) >= 30).length },
+            { id: 'low-margin', label: 'Low Margin (<15%)', count: orders.filter(o => (o.profit_percentage || 0) < 15).length },
+            { id: 'recent', label: 'Last 7 Days', count: orders.filter(o => {
+              const sevenDaysAgo = new Date();
+              sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+              return new Date(o.order_date) >= sevenDaysAgo;
+            }).length },
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => {
+                setActiveTab(tab.id as TabType);
+                setCurrentPage(1);
+              }}
+              className={`
+                py-4 px-1 border-b-2 font-medium text-sm transition-colors
+                ${activeTab === tab.id
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }
+              `}
+            >
+              {tab.label}
+              <span className={`ml-2 py-0.5 px-2 rounded-full text-xs ${
+                activeTab === tab.id ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-600'
+              }`}>
+                {tab.count}
+              </span>
+            </button>
+          ))}
+        </nav>
+      </div>
+
+      {/* Filters */}
       <div className="bg-white rounded-lg shadow p-4">
-        <input
-          type="text"
-          placeholder="Search by order number..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-        />
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          {/* Search */}
+          <div className="md:col-span-2">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Search Orders</label>
+            <input
+              type="text"
+              placeholder="Search by order number..."
+              value={searchTerm}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+          </div>
+
+          {/* Date Filter */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Date Range</label>
+            <select
+              value={dateFilter}
+              onChange={(e) => {
+                setDateFilter(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              <option value="all">All Time</option>
+              <option value="today">Today</option>
+              <option value="week">Last 7 Days</option>
+              <option value="month">Last 30 Days</option>
+            </select>
+          </div>
+
+          {/* Sort */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Sort By</label>
+            <select
+              value={`${sortField}-${sortOrder}`}
+              onChange={(e) => {
+                const [field, order] = e.target.value.split('-');
+                setSortField(field as SortField);
+                setSortOrder(order as SortOrder);
+              }}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              <option value="order_date-desc">Date (Newest)</option>
+              <option value="order_date-asc">Date (Oldest)</option>
+              <option value="profit_percentage-desc">Profit % (High)</option>
+              <option value="profit_percentage-asc">Profit % (Low)</option>
+              <option value="total_fulfillment_cost_usd-desc">Cost (High)</option>
+              <option value="total_fulfillment_cost_usd-asc">Cost (Low)</option>
+            </select>
+          </div>
+        </div>
       </div>
 
       {/* Orders Table */}
@@ -82,75 +265,134 @@ export default function OrdersPage() {
           <div className="p-8 text-center text-gray-500">Loading orders...</div>
         ) : filteredOrders.length === 0 ? (
           <div className="p-8 text-center text-gray-500">
-            No orders found. Please sync Shopify data and upload invoices.
+            No orders found matching your filters.
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Order
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Date
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Revenue
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Cost
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Profit
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Margin
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {filteredOrders.map((order) => (
-                  <tr key={order.order_number} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900">
-                        {order.order_name || order.order_number}
-                      </div>
-                      <div className="text-sm text-gray-500">
-                        {order.item_count} item(s)
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {order.order_date ? format(new Date(order.order_date), 'MMM d, yyyy') : 'N/A'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right font-medium">
-                      ${order.shopify_total_usd?.toFixed(2) || '0.00'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
-                      ${order.total_fulfillment_cost_usd?.toFixed(2) || '0.00'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right font-medium">
-                      ${order.profit_usd?.toFixed(2) || '0.00'}
-                    </td>
-                    <td className={`px-6 py-4 whitespace-nowrap text-sm text-right font-semibold ${getProfitColor(order.profit_percentage || 0)}`}>
-                      {order.profit_percentage?.toFixed(1) || '0.0'}%
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <button
-                        onClick={() => fetchOrderDetails(order.order_number)}
-                        className="text-blue-600 hover:text-blue-900"
-                      >
-                        Details
-                      </button>
-                    </td>
+          <>
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Order
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Date
+                    </th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Revenue
+                    </th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Cost
+                    </th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Profit
+                    </th>
+                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Margin
+                    </th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Actions
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {paginatedOrders.map((order) => {
+                    const badge = getProfitBadge(order.profit_percentage || 0);
+                    return (
+                      <tr key={order.order_number} className="hover:bg-gray-50 transition-colors">
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center">
+                            <div>
+                              <div className="text-sm font-bold text-gray-900">
+                                {order.order_name || order.order_number}
+                              </div>
+                              <div className="text-sm text-gray-500">
+                                {order.item_count} item(s)
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                          {order.order_date ? format(new Date(order.order_date), 'MMM d, yyyy') : 'N/A'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right font-semibold">
+                          ${order.shopify_total_usd?.toFixed(2) || '0.00'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 text-right">
+                          ${order.total_fulfillment_cost_usd?.toFixed(2) || '0.00'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-right">
+                          <span className={`font-semibold ${order.profit_usd >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                            ${order.profit_usd?.toFixed(2) || '0.00'}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-center">
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getProfitColor(order.profit_percentage || 0)}`}>
+                            {order.profit_percentage?.toFixed(1) || '0.0'}%
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
+                          <button
+                            onClick={() => fetchOrderDetails(order.order_number)}
+                            className="text-blue-600 hover:text-blue-900 font-medium"
+                          >
+                            View Details →
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination */}
+            <div className="bg-gray-50 px-6 py-4 border-t border-gray-200">
+              <div className="flex items-center justify-between">
+                <div className="text-sm text-gray-700">
+                  Showing <span className="font-medium">{startIndex + 1}</span> to{' '}
+                  <span className="font-medium">{Math.min(endIndex, filteredOrders.length)}</span> of{' '}
+                  <span className="font-medium">{filteredOrders.length}</span> results
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                    className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Previous
+                  </button>
+                  <div className="flex items-center gap-1">
+                    {[...Array(Math.min(5, totalPages))].map((_, i) => {
+                      const pageNum = i + 1;
+                      return (
+                        <button
+                          key={pageNum}
+                          onClick={() => setCurrentPage(pageNum)}
+                          className={`px-4 py-2 rounded-lg text-sm font-medium ${
+                            currentPage === pageNum
+                              ? 'bg-blue-600 text-white'
+                              : 'text-gray-700 hover:bg-gray-100'
+                          }`}
+                        >
+                          {pageNum}
+                        </button>
+                      );
+                    })}
+                    {totalPages > 5 && <span className="px-2 text-gray-500">...</span>}
+                  </div>
+                  <button
+                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                    disabled={currentPage === totalPages}
+                    className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            </div>
+          </>
         )}
       </div>
 
@@ -181,12 +423,15 @@ export default function OrdersPage() {
                 <h3 className="text-lg font-semibold text-gray-900 mb-3">Products</h3>
                 <div className="space-y-2">
                   {orderDetails.lineItems.map((item: any, idx: number) => (
-                    <div key={idx} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+                    <div key={idx} className="flex justify-between items-center p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-100">
                       <div>
-                        <p className="font-medium text-gray-900">{item.title}</p>
-                        <p className="text-sm text-gray-500">SKU: {item.sku || 'N/A'} • Qty: {item.quantity}</p>
+                        <p className="font-bold text-gray-900 text-lg">{item.title}</p>
+                        <p className="text-sm text-gray-600 mt-1">
+                          <span className="font-medium">SKU:</span> {item.sku || 'N/A'} •
+                          <span className="font-medium ml-2">Qty:</span> {item.quantity}
+                        </p>
                       </div>
-                      <p className="font-semibold text-gray-900">${(item.price * item.quantity).toFixed(2)}</p>
+                      <p className="font-bold text-gray-900 text-xl">${(item.price * item.quantity).toFixed(2)}</p>
                     </div>
                   ))}
                 </div>
@@ -198,18 +443,18 @@ export default function OrdersPage() {
                   <h3 className="text-lg font-semibold text-gray-900 mb-3">Unit & Domestic Shipping Costs</h3>
                   <div className="space-y-2">
                     {orderDetails.commodityItems.map((item: any, idx: number) => (
-                      <div key={idx} className="p-3 bg-gray-50 rounded-lg">
+                      <div key={idx} className="p-4 bg-gray-50 rounded-lg border border-gray-200">
                         <div className="flex justify-between text-sm">
                           <span className="text-gray-600">Unit Price:</span>
-                          <span className="font-medium">${item.price_usd.toFixed(2)} (¥{item.price_cny.toFixed(2)})</span>
+                          <span className="font-medium">${item.price_usd.toFixed(2)} <span className="text-gray-500">(¥{item.price_cny.toFixed(2)})</span></span>
                         </div>
-                        <div className="flex justify-between text-sm mt-1">
+                        <div className="flex justify-between text-sm mt-2">
                           <span className="text-gray-600">Domestic Freight:</span>
-                          <span className="font-medium">${item.domestic_freight_usd.toFixed(2)} (¥{item.domestic_freight_cny.toFixed(2)})</span>
+                          <span className="font-medium">${item.domestic_freight_usd.toFixed(2)} <span className="text-gray-500">(¥{item.domestic_freight_cny.toFixed(2)})</span></span>
                         </div>
-                        <div className="flex justify-between text-sm mt-1 pt-2 border-t border-gray-200">
+                        <div className="flex justify-between text-sm mt-2 pt-2 border-t border-gray-300">
                           <span className="text-gray-900 font-semibold">Total:</span>
-                          <span className="font-semibold">${item.total_usd.toFixed(2)} (¥{item.total_cny.toFixed(2)})</span>
+                          <span className="font-bold text-gray-900">${item.total_usd.toFixed(2)} <span className="text-gray-600">(¥{item.total_cny.toFixed(2)})</span></span>
                         </div>
                       </div>
                     ))}
@@ -223,12 +468,12 @@ export default function OrdersPage() {
                   <h3 className="text-lg font-semibold text-gray-900 mb-3">International Shipping & Fees</h3>
                   <div className="space-y-2">
                     {orderDetails.freightItems.map((item: any, idx: number) => (
-                      <div key={idx} className="p-3 bg-gray-50 rounded-lg">
+                      <div key={idx} className="p-4 bg-amber-50 rounded-lg border border-amber-200">
                         <div className="flex justify-between text-sm">
                           <span className="text-gray-600">International Shipping:</span>
-                          <span className="font-medium">${item.international_shipping_usd.toFixed(2)} (¥{item.international_shipping_cny.toFixed(2)})</span>
+                          <span className="font-medium">${item.international_shipping_usd.toFixed(2)} <span className="text-gray-500">(¥{item.international_shipping_cny.toFixed(2)})</span></span>
                         </div>
-                        <div className="flex justify-between text-sm mt-1">
+                        <div className="flex justify-between text-sm mt-2">
                           <span className="text-gray-600">Service Fee:</span>
                           <span className="font-medium">${item.service_fee_usd.toFixed(2)}</span>
                         </div>
@@ -239,24 +484,25 @@ export default function OrdersPage() {
               )}
 
               {/* Summary */}
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <div className="space-y-2">
+              <div className="bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-200 rounded-lg p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Order Summary</h3>
+                <div className="space-y-3">
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-700">Order Total (Revenue):</span>
-                    <span className="font-semibold text-gray-900">${orderDetails.order.total_price.toFixed(2)}</span>
+                    <span className="font-bold text-gray-900 text-lg">${orderDetails.order.total_price.toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-700">Total Fulfillment Cost:</span>
-                    <span className="font-semibold text-gray-900">
+                    <span className="font-bold text-gray-900 text-lg">
                       ${(
                         orderDetails.commodityItems.reduce((sum: number, item: any) => sum + item.total_usd, 0) +
                         orderDetails.freightItems.reduce((sum: number, item: any) => sum + item.international_shipping_usd + item.service_fee_usd, 0)
                       ).toFixed(2)}
                     </span>
                   </div>
-                  <div className="flex justify-between text-lg font-bold pt-2 border-t-2 border-blue-300">
+                  <div className="flex justify-between text-lg font-bold pt-3 border-t-2 border-green-300">
                     <span className="text-gray-900">Net Profit:</span>
-                    <span className="text-green-600">
+                    <span className="text-emerald-600 text-2xl">
                       ${(
                         orderDetails.order.total_price -
                         orderDetails.commodityItems.reduce((sum: number, item: any) => sum + item.total_usd, 0) -
