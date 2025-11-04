@@ -19,6 +19,9 @@ export default function ItemsPage() {
   const [expandedProducts, setExpandedProducts] = useState<Set<string>>(new Set());
   const [skuData, setSkuData] = useState<Map<string, SKUProfitabilitySummary[]>>(new Map());
   const [loadingSKUs, setLoadingSKUs] = useState<Set<string>>(new Set());
+  const [expandedSKUs, setExpandedSKUs] = useState<Set<string>>(new Set());
+  const [skuOrderDetails, setSkuOrderDetails] = useState<Map<string, any[]>>(new Map());
+  const [loadingOrderDetails, setLoadingOrderDetails] = useState<Set<string>>(new Set());
 
   // Filtering
   const [activeTab, setActiveTab] = useState<'all' | 'high_confidence' | 'profitable' | 'low_margin'>('all');
@@ -93,6 +96,50 @@ export default function ItemsPage() {
       // Expand
       setExpandedProducts(prev => new Set(prev).add(productTitle));
       await fetchSKUsForProduct(productTitle);
+    }
+  };
+
+  const fetchOrderDetailsForSKU = async (sku: string) => {
+    if (skuOrderDetails.has(sku)) {
+      // Already loaded
+      return;
+    }
+
+    setLoadingOrderDetails(prev => new Set(prev).add(sku));
+
+    try {
+      const response = await fetch(`/api/analysis/items?sku=${encodeURIComponent(sku)}`);
+      const result = await response.json();
+
+      if (result.success && result.data?.items) {
+        setSkuOrderDetails(prev => new Map(prev).set(sku, result.data.items));
+      }
+    } catch (err: any) {
+      console.error('Error fetching order details:', err);
+    } finally {
+      setLoadingOrderDetails(prev => {
+        const next = new Set(prev);
+        next.delete(sku);
+        return next;
+      });
+    }
+  };
+
+  const toggleSKU = async (sku: string, e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent product row toggle
+    const isExpanded = expandedSKUs.has(sku);
+
+    if (isExpanded) {
+      // Collapse
+      setExpandedSKUs(prev => {
+        const next = new Set(prev);
+        next.delete(sku);
+        return next;
+      });
+    } else {
+      // Expand
+      setExpandedSKUs(prev => new Set(prev).add(sku));
+      await fetchOrderDetailsForSKU(sku);
     }
   };
 
@@ -453,58 +500,168 @@ export default function ItemsPage() {
                                 {/* SKU Data Rows */}
                                 {skus.map((sku) => {
                                   const skuConfidenceBadge = getConfidenceBadge(sku.avg_confidence_score);
+                                  const isSkuExpanded = expandedSKUs.has(sku.sku);
+                                  const orderDetails = skuOrderDetails.get(sku.sku) || [];
+                                  const isLoadingOrders = loadingOrderDetails.has(sku.sku);
+
                                   return (
-                                    <tr key={sku.sku} className="bg-gray-50">
-                                      <td className="px-4 py-3"></td>
-                                      <td className="px-6 py-3">
-                                        <div className="text-sm text-gray-700 font-mono">{sku.sku}</div>
-                                      </td>
-                                      <td className="px-6 py-3 text-sm text-gray-600">
-                                        {sku.times_ordered}
-                                      </td>
-                                      <td className="px-6 py-3 text-right text-sm text-gray-700">
-                                        {sku.total_units_sold.toLocaleString()}
-                                      </td>
-                                      <td className="px-6 py-3 text-right text-sm text-gray-700">
-                                        ${sku.total_revenue_usd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                      </td>
-                                      <td className="px-6 py-3 text-right">
-                                        <div className="text-sm font-medium text-gray-700">
-                                          ${sku.avg_estimated_cost_usd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                        </div>
-                                        <div className="text-xs text-gray-500 mt-0.5 space-y-0.5">
-                                          {sku.avg_commodity_price_usd && (
-                                            <div>📦 ${sku.avg_commodity_price_usd.toFixed(2)}</div>
-                                          )}
-                                          {sku.avg_domestic_freight_usd && sku.avg_domestic_freight_usd > 0 && (
-                                            <div>🚛 ${sku.avg_domestic_freight_usd.toFixed(2)}</div>
-                                          )}
-                                          {sku.avg_intl_shipping_per_unit_usd && sku.avg_intl_shipping_per_unit_usd > 0 && (
-                                            <div>✈️ ${sku.avg_intl_shipping_per_unit_usd.toFixed(2)}</div>
-                                          )}
-                                          {sku.avg_service_fee_per_unit_usd && sku.avg_service_fee_per_unit_usd > 0 && (
-                                            <div>💵 ${sku.avg_service_fee_per_unit_usd.toFixed(2)}</div>
-                                          )}
-                                        </div>
-                                      </td>
-                                      <td className={`px-6 py-3 text-right text-sm font-medium ${
-                                        sku.total_profit_usd >= 0 ? 'text-green-600' : 'text-red-600'
-                                      }`}>
-                                        ${sku.total_profit_usd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                      </td>
-                                      <td className={`px-6 py-3 text-right text-sm ${
-                                        sku.avg_profit_margin_pct >= 20 ? 'text-green-600' :
-                                        sku.avg_profit_margin_pct >= 10 ? 'text-yellow-600' :
-                                        'text-red-600'
-                                      }`}>
-                                        {sku.avg_profit_margin_pct.toFixed(1)}%
-                                      </td>
-                                      <td className="px-6 py-3 text-center">
-                                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded ${skuConfidenceBadge.color}`}>
-                                          {skuConfidenceBadge.label}
-                                        </span>
-                                      </td>
-                                    </tr>
+                                    <>
+                                      <tr
+                                        key={sku.sku}
+                                        className="bg-gray-50 hover:bg-gray-100 cursor-pointer"
+                                        onClick={(e) => toggleSKU(sku.sku, e)}
+                                      >
+                                        <td className="px-4 py-3 text-center">
+                                          <span className="text-gray-400 text-xs">
+                                            {isSkuExpanded ? '▼' : '▶'}
+                                          </span>
+                                        </td>
+                                        <td className="px-6 py-3">
+                                          <div className="text-sm text-gray-700 font-mono">{sku.sku}</div>
+                                          <button
+                                            onClick={(e) => toggleSKU(sku.sku, e)}
+                                            className="text-xs text-blue-600 hover:text-blue-800 mt-1"
+                                          >
+                                            {isSkuExpanded ? 'Hide' : 'View'} Order Details
+                                          </button>
+                                        </td>
+                                        <td className="px-6 py-3 text-sm text-gray-600">
+                                          {sku.times_ordered}
+                                        </td>
+                                        <td className="px-6 py-3 text-right text-sm text-gray-700">
+                                          {sku.total_units_sold.toLocaleString()}
+                                        </td>
+                                        <td className="px-6 py-3 text-right text-sm text-gray-700">
+                                          ${sku.total_revenue_usd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                        </td>
+                                        <td className="px-6 py-3 text-right">
+                                          <div className="text-sm font-medium text-gray-700">
+                                            ${sku.avg_estimated_cost_usd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                          </div>
+                                          <div className="text-xs text-gray-500 mt-0.5 space-y-0.5">
+                                            {sku.avg_commodity_price_usd && (
+                                              <div>📦 ${sku.avg_commodity_price_usd.toFixed(2)}</div>
+                                            )}
+                                            {sku.avg_domestic_freight_usd && sku.avg_domestic_freight_usd > 0 && (
+                                              <div>🚛 ${sku.avg_domestic_freight_usd.toFixed(2)}</div>
+                                            )}
+                                            {sku.avg_intl_shipping_per_unit_usd && sku.avg_intl_shipping_per_unit_usd > 0 && (
+                                              <div>✈️ ${sku.avg_intl_shipping_per_unit_usd.toFixed(2)}</div>
+                                            )}
+                                            {sku.avg_service_fee_per_unit_usd && sku.avg_service_fee_per_unit_usd > 0 && (
+                                              <div>💵 ${sku.avg_service_fee_per_unit_usd.toFixed(2)}</div>
+                                            )}
+                                          </div>
+                                        </td>
+                                        <td className={`px-6 py-3 text-right text-sm font-medium ${
+                                          sku.total_profit_usd >= 0 ? 'text-green-600' : 'text-red-600'
+                                        }`}>
+                                          ${sku.total_profit_usd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                        </td>
+                                        <td className={`px-6 py-3 text-right text-sm ${
+                                          sku.avg_profit_margin_pct >= 20 ? 'text-green-600' :
+                                          sku.avg_profit_margin_pct >= 10 ? 'text-yellow-600' :
+                                          'text-red-600'
+                                        }`}>
+                                          {sku.avg_profit_margin_pct.toFixed(1)}%
+                                        </td>
+                                        <td className="px-6 py-3 text-center">
+                                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded ${skuConfidenceBadge.color}`}>
+                                            {skuConfidenceBadge.label}
+                                          </span>
+                                        </td>
+                                      </tr>
+
+                                      {/* Expanded Order Details for SKU */}
+                                      {isSkuExpanded && (
+                                        <tr>
+                                          <td colSpan={9} className="px-6 py-4 bg-white border-l-4 border-blue-400">
+                                            {isLoadingOrders ? (
+                                              <div className="text-center text-sm text-gray-500 py-4">Loading order details...</div>
+                                            ) : orderDetails.length > 0 ? (
+                                              <div className="space-y-3">
+                                                <h4 className="text-sm font-semibold text-gray-900 mb-3">
+                                                  Order Details for {sku.sku} ({orderDetails.length} orders)
+                                                </h4>
+                                                <div className="max-h-96 overflow-y-auto">
+                                                  <table className="min-w-full text-xs">
+                                                    <thead className="bg-gray-100 sticky top-0">
+                                                      <tr>
+                                                        <th className="px-3 py-2 text-left font-medium text-gray-700">Order #</th>
+                                                        <th className="px-3 py-2 text-left font-medium text-gray-700">Date</th>
+                                                        <th className="px-3 py-2 text-right font-medium text-gray-700">Qty</th>
+                                                        <th className="px-3 py-2 text-right font-medium text-gray-700">Revenue</th>
+                                                        <th className="px-3 py-2 text-right font-medium text-gray-700">Cost</th>
+                                                        <th className="px-3 py-2 text-right font-medium text-gray-700">Profit</th>
+                                                        <th className="px-3 py-2 text-left font-medium text-gray-700">Invoice Sources</th>
+                                                      </tr>
+                                                    </thead>
+                                                    <tbody className="divide-y divide-gray-200">
+                                                      {orderDetails.map((order, idx) => (
+                                                        <tr key={idx} className="hover:bg-gray-50">
+                                                          <td className="px-3 py-2 font-medium text-gray-900">{order.order_name || order.order_number}</td>
+                                                          <td className="px-3 py-2 text-gray-600">
+                                                            {order.order_date ? new Date(order.order_date).toLocaleDateString() : 'N/A'}
+                                                          </td>
+                                                          <td className="px-3 py-2 text-right text-gray-900">{order.quantity}</td>
+                                                          <td className="px-3 py-2 text-right text-gray-900">
+                                                            ${order.line_total_revenue?.toFixed(2) || '0.00'}
+                                                          </td>
+                                                          <td className="px-3 py-2 text-right text-gray-900">
+                                                            ${order.estimated_unit_cost_usd ? (order.estimated_unit_cost_usd * order.quantity).toFixed(2) : '0.00'}
+                                                          </td>
+                                                          <td className={`px-3 py-2 text-right font-medium ${
+                                                            (order.total_line_profit_usd || 0) >= 0 ? 'text-green-600' : 'text-red-600'
+                                                          }`}>
+                                                            ${order.total_line_profit_usd?.toFixed(2) || '0.00'}
+                                                          </td>
+                                                          <td className="px-3 py-2">
+                                                            <div className="space-y-1">
+                                                              {order.commodity_invoice_files && order.commodity_invoice_files.length > 0 && (
+                                                                <div className="text-xs">
+                                                                  <span className="font-semibold text-blue-700">📦 Commodity: </span>
+                                                                  {order.commodity_invoice_files.map((file: string, i: number) => (
+                                                                    <a
+                                                                      key={i}
+                                                                      href={`/invoices?id=${order.commodity_invoice_ids?.[i]}`}
+                                                                      className="text-blue-600 hover:text-blue-800 hover:underline"
+                                                                      onClick={(e) => e.stopPropagation()}
+                                                                    >
+                                                                      {file}
+                                                                    </a>
+                                                                  ))}
+                                                                </div>
+                                                              )}
+                                                              {order.freight_invoice_files && order.freight_invoice_files.length > 0 && (
+                                                                <div className="text-xs">
+                                                                  <span className="font-semibold text-purple-700">✈️ Freight: </span>
+                                                                  {order.freight_invoice_files.map((file: string, i: number) => (
+                                                                    <a
+                                                                      key={i}
+                                                                      href={`/invoices?id=${order.freight_invoice_ids?.[i]}`}
+                                                                      className="text-purple-600 hover:text-purple-800 hover:underline"
+                                                                      onClick={(e) => e.stopPropagation()}
+                                                                    >
+                                                                      {file}
+                                                                    </a>
+                                                                  ))}
+                                                                </div>
+                                                              )}
+                                                            </div>
+                                                          </td>
+                                                        </tr>
+                                                      ))}
+                                                    </tbody>
+                                                  </table>
+                                                </div>
+                                              </div>
+                                            ) : (
+                                              <div className="text-center text-sm text-gray-500 py-4">No order details available</div>
+                                            )}
+                                          </td>
+                                        </tr>
+                                      )}
+                                    </>
                                   );
                                 })}
                               </>
