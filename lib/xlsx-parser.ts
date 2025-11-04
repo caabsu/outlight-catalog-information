@@ -125,12 +125,26 @@ export function parseInvoiceFile(fileBuffer: Buffer, uploadId: number): ParsedIn
 
     if (isFreight) {
       // Parse as freight sheet
-      for (const row of data) {
-        const orderNumber = String(
-          findColumn(row, ['Order ID', 'OrderID', 'order id', 'order_id', '订单号', '订单编号', 'Order Number']) || ''
-        ).trim();
+      let skippedRows = 0;
+      let zeroCostRows = 0;
 
-        if (!orderNumber) continue;
+      for (const row of data) {
+        const rawOrderNumber = findColumn(row, ['Order ID', 'OrderID', 'order id', 'order_id', '订单号', '订单编号', 'Order Number']);
+        const orderNumber = String(rawOrderNumber || '').trim();
+
+        // Skip rows without valid order numbers
+        if (!orderNumber || orderNumber.length === 0) {
+          skippedRows++;
+          continue;
+        }
+
+        // Skip rows where order number is just whitespace or placeholder values
+        const normalized = orderNumber.toLowerCase().replace(/\s+/g, '');
+        if (normalized === 'n/a' || normalized === 'na' || normalized === '-' || normalized === '/' || normalized === '#') {
+          console.log(`⚠️  Skipping freight row with placeholder order number: "${orderNumber}"`);
+          skippedRows++;
+          continue;
+        }
 
         const internationalShippingCny = parseFloat(
           findColumn(row, [
@@ -149,6 +163,21 @@ export function parseInvoiceFile(fileBuffer: Buffer, uploadId: number): ParsedIn
           findColumn(row, ['Service Fee', 'service fee', 'Fee', 'fee', '服务费']) || 15
         );
 
+        // Skip rows with zero international shipping AND zero service fee (useless data)
+        if (internationalShippingCny === 0 && serviceFee === 0) {
+          console.log(`⚠️  Skipping freight row for order ${orderNumber} with zero costs`);
+          zeroCostRows++;
+          continue;
+        }
+
+        // CRITICAL: Skip rows with zero international shipping (even if service fee exists)
+        // This ensures only orders with actual international shipping are included
+        if (internationalShippingCny === 0) {
+          console.log(`⚠️  Skipping freight row for order ${orderNumber} - zero international shipping (only service fee: $${serviceFee})`);
+          zeroCostRows++;
+          continue;
+        }
+
         const item: FreightItem = {
           upload_id: uploadId,
           time: parseExcelDate(findColumn(row, ['Time', 'time', 'Date', 'date', '时间', '日期'])),
@@ -160,6 +189,13 @@ export function parseInvoiceFile(fileBuffer: Buffer, uploadId: number): ParsedIn
         };
 
         freightItems.push(item);
+      }
+
+      if (skippedRows > 0) {
+        console.log(`⚠️  Skipped ${skippedRows} freight rows with invalid/missing order numbers`);
+      }
+      if (zeroCostRows > 0) {
+        console.log(`⚠️  Skipped ${zeroCostRows} freight rows with zero international shipping`);
       }
     }
   }
