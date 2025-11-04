@@ -257,7 +257,7 @@ export default function ProductsPage() {
           </div>
         </div>
 
-        {/* Hide Zero Cost Toggle */}
+        {/* Filter Toggle */}
         <div className="mt-4 pt-4 border-t border-gray-200">
           <label className="flex items-center cursor-pointer">
             <input
@@ -270,8 +270,9 @@ export default function ProductsPage() {
               className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
             />
             <span className="ml-2 text-sm font-medium text-gray-700">
-              Hide products with $0 cost (no invoice data)
+              Only show products with invoice data
             </span>
+            <span className="ml-2 text-xs text-gray-500">(excludes products without cost information)</span>
           </label>
         </div>
       </div>

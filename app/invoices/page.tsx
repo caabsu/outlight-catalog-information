@@ -13,10 +13,28 @@ interface InvoiceUpload {
   notes: string | null;
 }
 
+interface InvoiceDetails {
+  invoice: InvoiceUpload;
+  commodityItems: any[];
+  freightItems: any[];
+  affectedOrders: any[];
+  affectedProducts: any[];
+  summary: {
+    totalOrders: number;
+    totalProducts: number;
+    totalCommodityCost: number;
+    totalFreightCost: number;
+    totalCost: number;
+  };
+}
+
 export default function InvoicesPage() {
   const [invoices, setInvoices] = useState<InvoiceUpload[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState<number | null>(null);
+  const [selectedInvoice, setSelectedInvoice] = useState<number | null>(null);
+  const [invoiceDetails, setInvoiceDetails] = useState<InvoiceDetails | null>(null);
+  const [loadingDetails, setLoadingDetails] = useState(false);
 
   useEffect(() => {
     fetchInvoices();
@@ -38,6 +56,23 @@ export default function InvoicesPage() {
     }
   }
 
+  async function fetchInvoiceDetails(id: number) {
+    try {
+      setLoadingDetails(true);
+      setSelectedInvoice(id);
+      const res = await fetch(`/api/invoices/${id}`);
+      const data = await res.json();
+
+      if (data.success) {
+        setInvoiceDetails(data.data);
+      }
+    } catch (error) {
+      console.error('Error fetching invoice details:', error);
+    } finally {
+      setLoadingDetails(false);
+    }
+  }
+
   async function deleteInvoice(id: number, filename: string) {
     if (!confirm(`Are you sure you want to delete "${filename}"?\n\nThis will remove all cost data from this invoice and update your analysis.`)) {
       return;
@@ -52,8 +87,11 @@ export default function InvoicesPage() {
       const data = await res.json();
 
       if (data.success) {
-        // Remove from list
         setInvoices(invoices.filter(inv => inv.id !== id));
+        if (selectedInvoice === id) {
+          setSelectedInvoice(null);
+          setInvoiceDetails(null);
+        }
         alert('Invoice deleted successfully! Your analysis has been updated.');
       } else {
         alert('Error deleting invoice: ' + data.error);
@@ -164,7 +202,13 @@ export default function InvoicesPage() {
                         </span>
                       )}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm space-x-3">
+                      <button
+                        onClick={() => fetchInvoiceDetails(invoice.id)}
+                        className="text-blue-600 hover:text-blue-900 font-medium"
+                      >
+                        View Details
+                      </button>
                       <button
                         onClick={() => deleteInvoice(invoice.id, invoice.filename)}
                         disabled={deleting === invoice.id}
@@ -183,6 +227,146 @@ export default function InvoicesPage() {
         )}
       </div>
 
+      {/* Invoice Details Modal */}
+      {selectedInvoice && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-6xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center">
+              <h2 className="text-2xl font-bold text-gray-900">
+                Invoice Details
+              </h2>
+              <button
+                onClick={() => {
+                  setSelectedInvoice(null);
+                  setInvoiceDetails(null);
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {loadingDetails ? (
+                <div className="text-center py-12 text-gray-500">Loading details...</div>
+              ) : invoiceDetails ? (
+                <>
+                  {/* Summary Stats */}
+                  <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                    <div className="bg-blue-50 rounded-lg p-4">
+                      <p className="text-sm font-medium text-blue-600">Orders Affected</p>
+                      <p className="mt-2 text-3xl font-bold text-blue-700">{invoiceDetails.summary.totalOrders}</p>
+                    </div>
+                    <div className="bg-purple-50 rounded-lg p-4">
+                      <p className="text-sm font-medium text-purple-600">Products Affected</p>
+                      <p className="mt-2 text-3xl font-bold text-purple-700">{invoiceDetails.summary.totalProducts}</p>
+                    </div>
+                    <div className="bg-green-50 rounded-lg p-4">
+                      <p className="text-sm font-medium text-green-600">Commodity Cost</p>
+                      <p className="mt-2 text-2xl font-bold text-green-700">${invoiceDetails.summary.totalCommodityCost.toFixed(2)}</p>
+                    </div>
+                    <div className="bg-orange-50 rounded-lg p-4">
+                      <p className="text-sm font-medium text-orange-600">Freight Cost</p>
+                      <p className="mt-2 text-2xl font-bold text-orange-700">${invoiceDetails.summary.totalFreightCost.toFixed(2)}</p>
+                    </div>
+                    <div className="bg-gray-50 rounded-lg p-4">
+                      <p className="text-sm font-medium text-gray-600">Total Cost</p>
+                      <p className="mt-2 text-2xl font-bold text-gray-900">${invoiceDetails.summary.totalCost.toFixed(2)}</p>
+                    </div>
+                  </div>
+
+                  {/* Affected Orders */}
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-3">Affected Orders ({invoiceDetails.affectedOrders.length})</h3>
+                    {invoiceDetails.affectedOrders.length > 0 ? (
+                      <div className="bg-gray-50 rounded-lg p-4 max-h-64 overflow-y-auto">
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                          {invoiceDetails.affectedOrders.map((order, idx) => (
+                            <div key={idx} className="bg-white rounded p-3 border border-gray-200">
+                              <p className="font-semibold text-gray-900 text-sm">{order.order_name}</p>
+                              <p className="text-xs text-gray-500 mt-1">${order.total_price?.toFixed(2)}</p>
+                              <p className="text-xs text-gray-400">{order.created_at ? format(new Date(order.created_at), 'MMM d, yyyy') : ''}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-gray-500 text-sm">No orders affected</p>
+                    )}
+                  </div>
+
+                  {/* Commodity Items Details */}
+                  {invoiceDetails.commodityItems.length > 0 && (
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-900 mb-3">Commodity Items ({invoiceDetails.commodityItems.length})</h3>
+                      <div className="bg-blue-50 rounded-lg p-4 max-h-96 overflow-y-auto">
+                        <table className="min-w-full text-sm">
+                          <thead className="bg-blue-100 sticky top-0">
+                            <tr>
+                              <th className="px-3 py-2 text-left font-medium text-blue-900">Order #</th>
+                              <th className="px-3 py-2 text-left font-medium text-blue-900">SKU</th>
+                              <th className="px-3 py-2 text-right font-medium text-blue-900">Unit Price</th>
+                              <th className="px-3 py-2 text-right font-medium text-blue-900">Domestic Freight</th>
+                              <th className="px-3 py-2 text-right font-medium text-blue-900">Total (USD)</th>
+                            </tr>
+                          </thead>
+                          <tbody className="bg-white divide-y divide-blue-100">
+                            {invoiceDetails.commodityItems.map((item, idx) => (
+                              <tr key={idx} className="hover:bg-blue-50">
+                                <td className="px-3 py-2 font-medium text-gray-900">{item.order_number}</td>
+                                <td className="px-3 py-2 text-gray-600">{item.sku || 'N/A'}</td>
+                                <td className="px-3 py-2 text-right text-gray-900">${item.price_usd?.toFixed(2)}</td>
+                                <td className="px-3 py-2 text-right text-gray-900">${item.domestic_freight_usd?.toFixed(2)}</td>
+                                <td className="px-3 py-2 text-right font-semibold text-gray-900">${item.total_usd?.toFixed(2)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Freight Items Details */}
+                  {invoiceDetails.freightItems.length > 0 && (
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-900 mb-3">Freight Items ({invoiceDetails.freightItems.length})</h3>
+                      <div className="bg-purple-50 rounded-lg p-4 max-h-96 overflow-y-auto">
+                        <table className="min-w-full text-sm">
+                          <thead className="bg-purple-100 sticky top-0">
+                            <tr>
+                              <th className="px-3 py-2 text-left font-medium text-purple-900">Order #</th>
+                              <th className="px-3 py-2 text-right font-medium text-purple-900">Weight</th>
+                              <th className="px-3 py-2 text-right font-medium text-purple-900">Int'l Shipping</th>
+                              <th className="px-3 py-2 text-right font-medium text-purple-900">Service Fee</th>
+                              <th className="px-3 py-2 text-right font-medium text-purple-900">Total (USD)</th>
+                            </tr>
+                          </thead>
+                          <tbody className="bg-white divide-y divide-purple-100">
+                            {invoiceDetails.freightItems.map((item, idx) => (
+                              <tr key={idx} className="hover:bg-purple-50">
+                                <td className="px-3 py-2 font-medium text-gray-900">{item.order_number}</td>
+                                <td className="px-3 py-2 text-right text-gray-600">{item.weight || 'N/A'}</td>
+                                <td className="px-3 py-2 text-right text-gray-900">${item.international_shipping_usd?.toFixed(2)}</td>
+                                <td className="px-3 py-2 text-right text-gray-900">${item.service_fee_usd?.toFixed(2)}</td>
+                                <td className="px-3 py-2 text-right font-semibold text-gray-900">
+                                  ${((item.international_shipping_usd || 0) + (item.service_fee_usd || 0)).toFixed(2)}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Info Box */}
       <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
         <div className="flex">
@@ -193,10 +377,10 @@ export default function InvoicesPage() {
             <h3 className="text-sm font-medium text-yellow-800">Important Information</h3>
             <div className="mt-2 text-sm text-yellow-700">
               <ul className="list-disc list-inside space-y-1">
+                <li>Click "View Details" to see which orders and products each invoice affects</li>
                 <li>Deleting an invoice will remove all cost data associated with it</li>
                 <li>Your order and product analysis will be automatically updated</li>
                 <li>Orders without invoice data will show $0 for costs and 0% margin</li>
-                <li>This action cannot be undone - make sure before deleting!</li>
               </ul>
             </div>
           </div>
