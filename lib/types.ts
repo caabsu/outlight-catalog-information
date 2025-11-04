@@ -127,6 +127,78 @@ export interface ProductCostAnalysis {
   avg_profit_per_unit_usd: number;
 }
 
+// Item-Level Analysis Types
+export interface ItemCostAnalysis {
+  line_item_id: number;
+  order_number: string;
+  order_name: string;
+  order_date: string;
+  sku: string;
+  product_title: string;
+  quantity: number;
+  unit_price_shopify: number;
+  actual_unit_price_usd: number;
+  line_total_revenue: number;
+  total_discount: number;
+
+  // Cost estimation data
+  direct_avg_cost_from_invoices?: number;
+  direct_avg_unit_price?: number;
+  direct_avg_domestic_freight?: number;
+  times_seen_in_invoices?: number;
+  cost_price_variance?: number;
+
+  // Order-level costs
+  total_commodity_cost?: number;
+  total_freight_cost?: number;
+  total_service_fee?: number;
+
+  // Best estimate
+  estimated_unit_cost_usd: number;
+  cost_confidence_score: number;
+  cost_data_source: string;
+
+  // Profitability
+  profit_per_unit_usd: number;
+  total_line_profit_usd: number;
+  profit_margin_percentage: number;
+
+  avg_unit_price_cny_converted?: number;
+  avg_domestic_freight_per_unit?: number;
+}
+
+export interface SKUProfitabilitySummary {
+  sku: string;
+  product_title: string;
+  times_ordered: number;
+  total_units_sold: number;
+
+  // Revenue metrics
+  avg_selling_price_usd: number;
+  total_revenue_usd: number;
+
+  // Cost metrics
+  avg_estimated_cost_usd: number;
+  total_estimated_cost_usd: number;
+  avg_confidence_score: number;
+
+  // Profitability
+  avg_profit_per_unit_usd: number;
+  total_profit_usd: number;
+  avg_profit_margin_pct: number;
+
+  // Data quality indicators
+  instances_with_invoice_data: number;
+  instances_with_order_data: number;
+  instances_estimated: number;
+
+  // Price ranges
+  min_selling_price_usd: number;
+  max_selling_price_usd: number;
+  min_cost_usd: number;
+  max_cost_usd: number;
+}
+
 // XLS Parsing Types
 export interface CommodityRowRaw {
   Time?: any;

@@ -10,6 +10,7 @@ export default function Navigation() {
     { href: '/', label: 'Dashboard' },
     { href: '/orders', label: 'Orders Analysis' },
     { href: '/products', label: 'Products Analysis' },
+    { href: '/items', label: 'Item Profitability' },
     { href: '/invoices', label: 'Invoices' },
     { href: '/upload', label: 'Upload Invoice' },
     { href: '/sync', label: 'Sync Shopify' },
