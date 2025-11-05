@@ -141,6 +141,12 @@ export default function OrdersPage() {
 
   const filteredOrders = getFilteredOrders();
 
+  // Summary calculations
+  const totalRevenue = filteredOrders.reduce((sum, o) => sum + (o.shopify_total_usd || 0), 0);
+  const totalCosts = filteredOrders.reduce((sum, o) => sum + (o.total_fulfillment_cost_usd || 0), 0);
+  const totalProfit = filteredOrders.reduce((sum, o) => sum + (o.profit_usd || 0), 0);
+  const avgMargin = filteredOrders.length > 0 ? filteredOrders.reduce((sum, o) => sum + (o.profit_percentage || 0), 0) / filteredOrders.length : 0;
+
   // Pagination
   const totalPages = Math.ceil(filteredOrders.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
@@ -198,8 +204,8 @@ export default function OrdersPage() {
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Orders Analysis</h1>
-          <p className="mt-2 text-gray-600">
-            {filteredOrders.length} orders • ${filteredOrders.reduce((sum, o) => sum + (o.shopify_total_usd || 0), 0).toFixed(2)} total revenue
+          <p className="mt-2 text-gray-700 font-medium">
+            {filteredOrders.length} orders • ${totalRevenue.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})} revenue • ${totalProfit.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})} profit
           </p>
         </div>
         <button
@@ -212,6 +218,49 @@ export default function OrdersPage() {
           Refresh
         </button>
       </div>
+
+      {/* Summary Stats */}
+      {filteredOrders.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+          <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg shadow-md p-6 border border-blue-200">
+            <p className="text-sm font-semibold text-blue-900 uppercase tracking-wide">Total Orders</p>
+            <p className="mt-2 text-4xl font-bold text-blue-900">
+              {filteredOrders.length}
+            </p>
+            <p className="mt-1 text-xs text-blue-700">in selected period</p>
+          </div>
+          <div className="bg-gradient-to-br from-emerald-50 to-emerald-100 rounded-lg shadow-md p-6 border border-emerald-200">
+            <p className="text-sm font-semibold text-emerald-900 uppercase tracking-wide">Total Revenue</p>
+            <p className="mt-2 text-4xl font-bold text-emerald-900">
+              ${(totalRevenue / 1000).toFixed(1)}k
+            </p>
+            <p className="mt-1 text-xs text-emerald-700">${totalRevenue.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</p>
+          </div>
+          <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-lg shadow-md p-6 border border-red-200">
+            <p className="text-sm font-semibold text-red-900 uppercase tracking-wide">Total Costs</p>
+            <p className="mt-2 text-4xl font-bold text-red-900">
+              ${(totalCosts / 1000).toFixed(1)}k
+            </p>
+            <p className="mt-1 text-xs text-red-700">${totalCosts.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</p>
+          </div>
+          <div className={`bg-gradient-to-br rounded-lg shadow-md p-6 border ${totalProfit >= 0 ? 'from-green-50 to-green-100 border-green-200' : 'from-red-50 to-red-100 border-red-200'}`}>
+            <p className={`text-sm font-semibold uppercase tracking-wide ${totalProfit >= 0 ? 'text-green-900' : 'text-red-900'}`}>Total Profit</p>
+            <p className={`mt-2 text-4xl font-bold ${totalProfit >= 0 ? 'text-green-900' : 'text-red-900'}`}>
+              ${(totalProfit / 1000).toFixed(1)}k
+            </p>
+            <p className={`mt-1 text-xs ${totalProfit >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+              ${totalProfit.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+            </p>
+          </div>
+          <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg shadow-md p-6 border border-purple-200">
+            <p className="text-sm font-semibold text-purple-900 uppercase tracking-wide">Avg Margin</p>
+            <p className="mt-2 text-4xl font-bold text-purple-900">
+              {avgMargin.toFixed(1)}%
+            </p>
+            <p className="mt-1 text-xs text-purple-700">average profit margin</p>
+          </div>
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="border-b border-gray-200">
@@ -256,7 +305,7 @@ export default function OrdersPage() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           {/* Search */}
           <div className="md:col-span-2">
-            <label className="block text-sm font-medium text-gray-700 mb-1">Search Orders</label>
+            <label className="block text-sm font-semibold text-gray-900 mb-1">🔍 Search Orders</label>
             <input
               type="text"
               placeholder="Search by order number..."
@@ -271,7 +320,7 @@ export default function OrdersPage() {
 
           {/* Date Filter */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Date Range</label>
+            <label className="block text-sm font-semibold text-gray-900 mb-1">📅 Date Range</label>
             <select
               value={dateFilter}
               onChange={(e) => {
@@ -289,7 +338,7 @@ export default function OrdersPage() {
 
           {/* Sort */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Sort By</label>
+            <label className="block text-sm font-semibold text-gray-900 mb-1">📊 Sort By</label>
             <select
               value={`${sortField}-${sortOrder}`}
               onChange={(e) => {
@@ -327,10 +376,10 @@ export default function OrdersPage() {
               }}
               className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
             />
-            <span className="ml-2 text-sm font-medium text-gray-700">
+            <span className="ml-2 text-sm font-semibold text-gray-900">
               Only show orders with invoice data
             </span>
-            <span className="ml-2 text-xs text-gray-500">(excludes orders without cost information)</span>
+            <span className="ml-2 text-xs text-gray-700">(excludes orders without cost information)</span>
           </label>
         </div>
       </div>
