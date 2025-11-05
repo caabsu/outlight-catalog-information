@@ -207,6 +207,10 @@ export default function OrdersPage() {
           <p className="mt-2 text-gray-700 font-medium">
             {filteredOrders.length} orders • ${totalRevenue.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})} revenue • ${totalProfit.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})} profit
           </p>
+          <p className="mt-1 text-sm text-blue-600 font-semibold flex items-center gap-1">
+            <span className="bg-blue-100 px-2 py-0.5 rounded">ℹ️ Single-SKU Orders Only</span>
+            <span className="text-gray-600">• Complete invoice data (commodity + freight)</span>
+          </p>
         </div>
         <button
           onClick={fetchOrders}
