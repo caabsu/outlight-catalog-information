@@ -567,9 +567,16 @@ export default function ProductsPage() {
                             </div>
                             <div className="text-xs space-y-0.5 mt-1">
                               {product.avg_unit_cost_cny && product.avg_unit_cost_cny > 0 ? (
-                                <div className="text-gray-600">
-                                  ¥{product.avg_unit_cost_cny.toFixed(2)}
-                                </div>
+                                <>
+                                  <div className="text-gray-600">
+                                    ¥{product.avg_unit_cost_cny.toFixed(2)}
+                                  </div>
+                                  {product.avg_item_cost_usd && product.avg_shipping_cost_usd && (
+                                    <div className="text-blue-700 font-semibold">
+                                      🏷️ ${product.avg_item_cost_usd.toFixed(2)} + 🚛 ${product.avg_shipping_cost_usd.toFixed(2)}
+                                    </div>
+                                  )}
+                                </>
                               ) : (
                                 <div className="text-red-600 font-semibold">
                                   No data

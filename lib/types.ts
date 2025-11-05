@@ -125,6 +125,19 @@ export interface ProductCostAnalysis {
   avg_unit_cost_usd: number;
   avg_unit_cost_cny: number;
   avg_profit_per_unit_usd: number;
+
+  // Cost breakdown (from new database view)
+  avg_item_cost_usd?: number;           // Product cost only
+  avg_shipping_cost_usd?: number;       // All shipping (domestic + intl + fees)
+  total_cost_usd?: number;              // Total costs
+  total_item_cost_usd?: number;         // Total spent on items
+  total_shipping_cost_usd?: number;     // Total spent on shipping
+  total_profit_usd?: number;            // Total profit
+  avg_profit_margin_pct?: number;       // Average profit margin percentage
+  item_cost_percentage?: number;        // % of cost that's items
+  shipping_cost_percentage?: number;    // % of cost that's shipping
+  single_sku_order_count?: number;      // How many single-SKU orders
+  orders_with_cost_data?: number;       // Orders with invoice data
 }
 
 // Item-Level Analysis Types
