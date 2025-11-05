@@ -196,12 +196,14 @@ export function parseInvoiceFile(fileBuffer: Buffer, uploadId: number): ParsedIn
           ]) || 0
         );
 
-        const serviceFee = parseFloat(
-          findColumn(row, ['Service Fee', 'service fee', 'Fee', 'fee', '服务费']) || 15
+        // Service fee is in CNY in the Excel file, need to convert to USD
+        const serviceFeeCny = parseFloat(
+          findColumn(row, ['Service Fee', 'service fee', 'Fee', 'fee', '服务费']) || 0
         );
+        const serviceFeeUsd = serviceFeeCny * CNY_TO_USD_RATE;
 
         // Skip rows with zero international shipping AND zero service fee (useless data)
-        if (internationalShippingCny === 0 && serviceFee === 0) {
+        if (internationalShippingCny === 0 && serviceFeeCny === 0) {
           console.log(`⚠️  Skipping freight row for order ${orderNumber} with zero costs`);
           zeroCostRows++;
           continue;
@@ -210,7 +212,7 @@ export function parseInvoiceFile(fileBuffer: Buffer, uploadId: number): ParsedIn
         // CRITICAL: Skip rows with zero international shipping (even if service fee exists)
         // This ensures only orders with actual international shipping are included
         if (internationalShippingCny === 0) {
-          console.log(`⚠️  Skipping freight row for order ${orderNumber} - zero international shipping (only service fee: $${serviceFee})`);
+          console.log(`⚠️  Skipping freight row for order ${orderNumber} - zero international shipping (only service fee: ¥${serviceFeeCny})`);
           zeroCostRows++;
           continue;
         }
@@ -222,7 +224,7 @@ export function parseInvoiceFile(fileBuffer: Buffer, uploadId: number): ParsedIn
           weight: parseFloat(findColumn(row, ['Weight', 'weight', '重量']) || 0) || undefined,
           international_shipping_cny: internationalShippingCny,
           international_shipping_usd: internationalShippingCny * CNY_TO_USD_RATE,
-          service_fee_usd: serviceFee,
+          service_fee_usd: serviceFeeUsd,
         };
 
         freightItems.push(item);
