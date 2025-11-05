@@ -62,28 +62,42 @@ export async function GET(request: NextRequest) {
 
         const freightItems = [...(freightData1 || []), ...(freightData2 || [])];
 
-        // Fetch invoice upload metadata
+        // Fetch invoice upload metadata and attach to items
         const uploadIds = [
           ...commodityItems.map((c: any) => c.upload_id),
           ...freightItems.map((f: any) => f.upload_id)
         ].filter((id, index, self) => id && self.indexOf(id) === index);
 
-        let invoiceUploads: any[] = [];
+        let invoiceUploadsMap = new Map();
         if (uploadIds.length > 0) {
           const { data: uploadData } = await supabaseAdmin
             .from('invoice_uploads')
             .select('*')
             .in('id', uploadIds);
 
-          invoiceUploads = uploadData || [];
+          (uploadData || []).forEach((upload: any) => {
+            invoiceUploadsMap.set(upload.id, upload);
+          });
         }
+
+        // Attach upload metadata to each invoice item
+        const commodityItemsWithFile = commodityItems.map((c: any) => ({
+          ...c,
+          upload_filename: invoiceUploadsMap.get(c.upload_id)?.filename || null,
+          upload_date: invoiceUploadsMap.get(c.upload_id)?.upload_date || null,
+        }));
+
+        const freightItemsWithFile = freightItems.map((f: any) => ({
+          ...f,
+          upload_filename: invoiceUploadsMap.get(f.upload_id)?.filename || null,
+          upload_date: invoiceUploadsMap.get(f.upload_id)?.upload_date || null,
+        }));
 
         return {
           orderItem: item,
           order: item.shopify_orders,
-          commodityItems,
-          freightItems,
-          invoiceUploads,
+          commodityItems: commodityItemsWithFile,
+          freightItems: freightItemsWithFile,
           hasInvoiceData: commodityItems.length > 0 || freightItems.length > 0,
         };
       })
@@ -91,7 +105,7 @@ export async function GET(request: NextRequest) {
 
     // Calculate summary statistics
     const totalOrders = ordersWithInvoices.length;
-    const ordersWithInvoices = ordersWithInvoices.filter(o => o.hasInvoiceData).length;
+    const ordersWithInvoiceCount = ordersWithInvoices.filter(o => o.hasInvoiceData).length;
     const totalRevenue = ordersWithInvoices.reduce(
       (sum, o) => sum + ((o.orderItem.price * o.orderItem.quantity) - o.orderItem.total_discount),
       0
@@ -112,8 +126,8 @@ export async function GET(request: NextRequest) {
         orders: ordersWithInvoices,
         summary: {
           totalOrders,
-          ordersWithInvoices,
-          ordersWithoutInvoices: totalOrders - ordersWithInvoices,
+          ordersWithInvoices: ordersWithInvoiceCount,
+          ordersWithoutInvoices: totalOrders - ordersWithInvoiceCount,
           totalRevenue,
           totalCommodityCost,
           totalFreightCost,

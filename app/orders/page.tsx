@@ -702,11 +702,26 @@ export default function OrdersPage() {
                       {orderDetails.commodityItems.map((item: any, idx: number) => {
                         const itemTotal = item.price_usd + item.domestic_freight_usd;
                         return (
-                          <div key={idx} className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-lg border-2 border-gray-300 p-4">
+                          <div key={idx} className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-lg border-2 border-blue-300 p-4">
                             <div className="space-y-2">
-                              <div className="flex justify-between items-center pb-2 border-b border-gray-300">
-                                <span className="font-semibold text-gray-900">Item #{idx + 1}</span>
-                                <span className="font-mono text-xs bg-gray-200 px-2 py-1 rounded">{item.order_number}</span>
+                              <div className="pb-2 border-b border-gray-300">
+                                <div className="flex justify-between items-center">
+                                  <span className="font-semibold text-gray-900">Commodity Invoice #{item.id}</span>
+                                  <span className="font-mono text-xs bg-gray-200 px-2 py-1 rounded">{item.order_number}</span>
+                                </div>
+                                {item.upload_filename && (
+                                  <div className="mt-2 flex items-start justify-between text-xs">
+                                    <div className="text-blue-600 flex items-center gap-1">
+                                      📄 {item.upload_filename}
+                                    </div>
+                                    <div className="text-gray-500">
+                                      Upload #{item.upload_id}
+                                      {item.upload_date && (
+                                        <span className="ml-2">• {new Date(item.upload_date).toLocaleDateString()}</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                               <div className="flex justify-between text-sm">
                                 <span className="text-gray-700">🏷️ Product Cost:</span>
@@ -772,14 +787,29 @@ export default function OrdersPage() {
                       {orderDetails.freightItems.map((item: any, idx: number) => {
                         const freightTotal = item.international_shipping_usd + item.service_fee_usd;
                         return (
-                          <div key={idx} className="bg-gradient-to-br from-amber-50 to-amber-100 rounded-lg border-2 border-amber-300 p-4">
+                          <div key={idx} className="bg-gradient-to-br from-amber-50 to-amber-100 rounded-lg border-2 border-amber-400 p-4">
                             <div className="space-y-2">
-                              <div className="flex justify-between items-center pb-2 border-b border-amber-300">
-                                <span className="font-semibold text-amber-900">Shipment #{idx + 1}</span>
-                                {item.weight && (
-                                  <span className="text-xs bg-amber-200 px-2 py-1 rounded font-semibold">
-                                    {item.weight}kg
-                                  </span>
+                              <div className="pb-2 border-b border-amber-400">
+                                <div className="flex justify-between items-center">
+                                  <span className="font-semibold text-amber-900">Freight Invoice #{item.id}</span>
+                                  {item.weight && (
+                                    <span className="text-xs bg-amber-200 px-2 py-1 rounded font-semibold">
+                                      {item.weight}kg
+                                    </span>
+                                  )}
+                                </div>
+                                {item.upload_filename && (
+                                  <div className="mt-2 flex items-start justify-between text-xs">
+                                    <div className="text-amber-700 flex items-center gap-1">
+                                      📄 {item.upload_filename}
+                                    </div>
+                                    <div className="text-gray-600">
+                                      Upload #{item.upload_id}
+                                      {item.upload_date && (
+                                        <span className="ml-2">• {new Date(item.upload_date).toLocaleDateString()}</span>
+                                      )}
+                                    </div>
+                                  </div>
                                 )}
                               </div>
                               <div className="flex justify-between text-sm">

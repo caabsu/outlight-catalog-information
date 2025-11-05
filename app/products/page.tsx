@@ -789,10 +789,24 @@ export default function ProductsPage() {
                                 </div>
                                 <div className="space-y-2">
                                   {orderData.commodityItems.map((item: any, i: number) => (
-                                    <div key={i} className="bg-gray-50 rounded p-2 text-xs">
-                                      <div className="flex justify-between items-start mb-1">
-                                        <span className="font-semibold text-gray-700">Invoice #{item.id}</span>
-                                        <span className="text-gray-500">Upload #{item.upload_id}</span>
+                                    <div key={i} className="bg-gray-50 rounded p-2 text-xs border border-blue-200">
+                                      <div className="flex justify-between items-start mb-2 pb-2 border-b border-gray-300">
+                                        <div>
+                                          <span className="font-semibold text-gray-700">Invoice #{item.id}</span>
+                                          {item.upload_filename && (
+                                            <div className="text-xs text-blue-600 mt-1 flex items-center gap-1">
+                                              📄 {item.upload_filename}
+                                            </div>
+                                          )}
+                                        </div>
+                                        <div className="text-right">
+                                          <span className="text-gray-500 text-xs">Upload #{item.upload_id}</span>
+                                          {item.upload_date && (
+                                            <div className="text-gray-400 text-xs mt-1">
+                                              {new Date(item.upload_date).toLocaleDateString()}
+                                            </div>
+                                          )}
+                                        </div>
                                       </div>
                                       <div className="grid grid-cols-2 gap-2 mt-2">
                                         <div>
@@ -825,10 +839,24 @@ export default function ProductsPage() {
                                 </div>
                                 <div className="space-y-2">
                                   {orderData.freightItems.map((item: any, i: number) => (
-                                    <div key={i} className="bg-gray-50 rounded p-2 text-xs">
-                                      <div className="flex justify-between items-start mb-1">
-                                        <span className="font-semibold text-gray-700">Invoice #{item.id}</span>
-                                        <span className="text-gray-500">Upload #{item.upload_id}</span>
+                                    <div key={i} className="bg-gray-50 rounded p-2 text-xs border border-amber-200">
+                                      <div className="flex justify-between items-start mb-2 pb-2 border-b border-gray-300">
+                                        <div>
+                                          <span className="font-semibold text-gray-700">Invoice #{item.id}</span>
+                                          {item.upload_filename && (
+                                            <div className="text-xs text-amber-600 mt-1 flex items-center gap-1">
+                                              📄 {item.upload_filename}
+                                            </div>
+                                          )}
+                                        </div>
+                                        <div className="text-right">
+                                          <span className="text-gray-500 text-xs">Upload #{item.upload_id}</span>
+                                          {item.upload_date && (
+                                            <div className="text-gray-400 text-xs mt-1">
+                                              {new Date(item.upload_date).toLocaleDateString()}
+                                            </div>
+                                          )}
+                                        </div>
                                       </div>
                                       {item.weight && (
                                         <div className="text-gray-600 mb-2">Weight: <span className="font-semibold">{item.weight}kg</span></div>
