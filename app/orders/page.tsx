@@ -557,20 +557,24 @@ export default function OrdersPage() {
         )}
       </div>
 
-      {/* Order Details Modal */}
+      {/* Order Details Modal - Enhanced */}
       {selectedOrder && orderDetails && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center">
-              <h2 className="text-2xl font-bold text-gray-900">
-                Order {orderDetails.order.order_name}
-              </h2>
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl max-w-6xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
+            {/* Header */}
+            <div className="sticky top-0 bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-5 flex justify-between items-center rounded-t-xl">
+              <div>
+                <h2 className="text-2xl font-bold">Order {orderDetails.order.order_name}</h2>
+                <p className="text-sm text-blue-100 mt-1">
+                  {orderDetails.order.created_at ? format(new Date(orderDetails.order.created_at), 'MMMM d, yyyy h:mm a') : 'N/A'}
+                </p>
+              </div>
               <button
                 onClick={() => {
                   setSelectedOrder(null);
                   setOrderDetails(null);
                 }}
-                className="text-gray-400 hover:text-gray-600"
+                className="text-white hover:bg-white hover:bg-opacity-20 rounded-full p-2 transition-colors"
               >
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -579,97 +583,276 @@ export default function OrdersPage() {
             </div>
 
             <div className="p-6 space-y-6">
-              {/* Line Items */}
+              {/* Key Metrics Banner */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="bg-gradient-to-br from-emerald-50 to-emerald-100 rounded-lg p-4 border border-emerald-200">
+                  <p className="text-xs font-semibold text-emerald-900 uppercase">Revenue</p>
+                  <p className="text-2xl font-bold text-emerald-700 mt-1">${orderDetails.order.total_price.toFixed(2)}</p>
+                </div>
+                <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-lg p-4 border border-red-200">
+                  <p className="text-xs font-semibold text-red-900 uppercase">Total Costs</p>
+                  <p className="text-2xl font-bold text-red-700 mt-1">
+                    ${(
+                      orderDetails.commodityItems.reduce((sum: number, item: any) => sum + item.total_usd, 0) +
+                      orderDetails.freightItems.reduce((sum: number, item: any) => sum + item.international_shipping_usd + item.service_fee_usd, 0)
+                    ).toFixed(2)}
+                  </p>
+                </div>
+                <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-4 border border-green-200">
+                  <p className="text-xs font-semibold text-green-900 uppercase">Net Profit</p>
+                  <p className="text-2xl font-bold text-green-700 mt-1">
+                    ${(
+                      orderDetails.order.total_price -
+                      orderDetails.commodityItems.reduce((sum: number, item: any) => sum + item.total_usd, 0) -
+                      orderDetails.freightItems.reduce((sum: number, item: any) => sum + item.international_shipping_usd + item.service_fee_usd, 0)
+                    ).toFixed(2)}
+                  </p>
+                </div>
+                <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg p-4 border border-purple-200">
+                  <p className="text-xs font-semibold text-purple-900 uppercase">Margin</p>
+                  <p className="text-2xl font-bold text-purple-700 mt-1">
+                    {orderDetails.order.total_price > 0 ? (
+                      ((orderDetails.order.total_price -
+                        orderDetails.commodityItems.reduce((sum: number, item: any) => sum + item.total_usd, 0) -
+                        orderDetails.freightItems.reduce((sum: number, item: any) => sum + item.international_shipping_usd + item.service_fee_usd, 0)
+                      ) / orderDetails.order.total_price * 100).toFixed(1)
+                    ) : '0.0'}%
+                  </p>
+                </div>
+              </div>
+
+              {/* Products Sold */}
               <div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-3">Products</h3>
-                <div className="space-y-2">
+                <h3 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
+                  <span className="bg-blue-100 text-blue-600 rounded-full w-8 h-8 flex items-center justify-center text-sm font-bold">
+                    {orderDetails.lineItems.length}
+                  </span>
+                  Products in Order
+                </h3>
+                <div className="space-y-3">
                   {orderDetails.lineItems.map((item: any, idx: number) => (
-                    <div key={idx} className="flex justify-between items-center p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-100">
-                      <div>
-                        <p className="font-bold text-gray-900 text-lg">{item.title}</p>
-                        <p className="text-sm text-gray-600 mt-1">
-                          <span className="font-medium">SKU:</span> {item.sku || 'N/A'} •
-                          <span className="font-medium ml-2">Qty:</span> {item.quantity}
-                        </p>
+                    <div key={idx} className="bg-gradient-to-r from-blue-50 via-indigo-50 to-purple-50 rounded-lg border-2 border-blue-200 p-4">
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                          <p className="font-bold text-gray-900 text-lg">{item.title}</p>
+                          <div className="mt-2 grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                            <div>
+                              <p className="text-gray-600 font-medium">SKU</p>
+                              <p className="font-mono text-gray-900 font-semibold">{item.sku || 'N/A'}</p>
+                            </div>
+                            <div>
+                              <p className="text-gray-600 font-medium">Quantity</p>
+                              <p className="text-gray-900 font-bold">{item.quantity} units</p>
+                            </div>
+                            <div>
+                              <p className="text-gray-600 font-medium">Unit Price</p>
+                              <p className="text-gray-900 font-semibold">${item.price.toFixed(2)}</p>
+                            </div>
+                            <div>
+                              <p className="text-gray-600 font-medium">Discount</p>
+                              <p className="text-red-600 font-semibold">-${item.total_discount.toFixed(2)}</p>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="ml-4 text-right">
+                          <p className="text-xs text-gray-600 font-medium">Line Total</p>
+                          <p className="font-bold text-emerald-600 text-2xl">${((item.price * item.quantity) - item.total_discount).toFixed(2)}</p>
+                        </div>
                       </div>
-                      <p className="font-bold text-gray-900 text-xl">${(item.price * item.quantity).toFixed(2)}</p>
                     </div>
                   ))}
                 </div>
               </div>
 
-              {/* Commodity Costs */}
-              {orderDetails.commodityItems.length > 0 && (
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-3">Unit & Domestic Shipping Costs</h3>
-                  <div className="space-y-2">
-                    {orderDetails.commodityItems.map((item: any, idx: number) => (
-                      <div key={idx} className="p-4 bg-gray-50 rounded-lg border border-gray-200">
-                        <div className="flex justify-between text-sm">
-                          <span className="text-gray-600">Unit Price:</span>
-                          <span className="font-medium">${item.price_usd.toFixed(2)} <span className="text-gray-500">(¥{item.price_cny.toFixed(2)})</span></span>
-                        </div>
-                        <div className="flex justify-between text-sm mt-2">
-                          <span className="text-gray-600">Domestic Freight:</span>
-                          <span className="font-medium">${item.domestic_freight_usd.toFixed(2)} <span className="text-gray-500">(¥{item.domestic_freight_cny.toFixed(2)})</span></span>
-                        </div>
-                        <div className="flex justify-between text-sm mt-2 pt-2 border-t border-gray-300">
-                          <span className="text-gray-900 font-semibold">Total:</span>
-                          <span className="font-bold text-gray-900">${item.total_usd.toFixed(2)} <span className="text-gray-600">(¥{item.total_cny.toFixed(2)})</span></span>
+              {/* Cost Breakdown Section */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Commodity Costs */}
+                {orderDetails.commodityItems.length > 0 && (
+                  <div>
+                    <h3 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
+                      📦 Product & Domestic Shipping
+                    </h3>
+                    <div className="space-y-3">
+                      {orderDetails.commodityItems.map((item: any, idx: number) => {
+                        const itemTotal = item.price_usd + item.domestic_freight_usd;
+                        return (
+                          <div key={idx} className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-lg border-2 border-gray-300 p-4">
+                            <div className="space-y-2">
+                              <div className="flex justify-between items-center pb-2 border-b border-gray-300">
+                                <span className="font-semibold text-gray-900">Item #{idx + 1}</span>
+                                <span className="font-mono text-xs bg-gray-200 px-2 py-1 rounded">{item.order_number}</span>
+                              </div>
+                              <div className="flex justify-between text-sm">
+                                <span className="text-gray-700">🏷️ Product Cost:</span>
+                                <div className="text-right">
+                                  <span className="font-bold text-gray-900">${item.price_usd.toFixed(2)}</span>
+                                  <span className="text-gray-500 text-xs ml-2">(¥{item.price_cny.toFixed(2)})</span>
+                                </div>
+                              </div>
+                              <div className="flex justify-between text-sm">
+                                <span className="text-gray-700">🚛 Domestic Freight:</span>
+                                <div className="text-right">
+                                  <span className="font-bold text-gray-900">${item.domestic_freight_usd.toFixed(2)}</span>
+                                  <span className="text-gray-500 text-xs ml-2">(¥{item.domestic_freight_cny.toFixed(2)})</span>
+                                </div>
+                              </div>
+                              <div className="flex justify-between text-sm pt-2 border-t-2 border-gray-400">
+                                <span className="text-gray-900 font-bold">Subtotal:</span>
+                                <div className="text-right">
+                                  <span className="font-bold text-red-700 text-lg">${item.total_usd.toFixed(2)}</span>
+                                  <span className="text-gray-600 text-xs ml-2">(¥{item.total_cny.toFixed(2)})</span>
+                                </div>
+                              </div>
+                              <div className="flex justify-between text-xs bg-blue-50 px-2 py-1 rounded">
+                                <span className="text-blue-700">Product Share:</span>
+                                <span className="font-semibold text-blue-900">
+                                  {itemTotal > 0 ? ((item.price_usd / itemTotal) * 100).toFixed(1) : '0'}% item,{' '}
+                                  {itemTotal > 0 ? ((item.domestic_freight_usd / itemTotal) * 100).toFixed(1) : '0'}% shipping
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                      <div className="bg-gradient-to-r from-red-100 to-red-200 rounded-lg border-2 border-red-400 p-4">
+                        <div className="flex justify-between items-center">
+                          <span className="font-bold text-red-900">Total Commodity Costs:</span>
+                          <span className="font-bold text-red-900 text-xl">
+                            ${orderDetails.commodityItems.reduce((sum: number, item: any) => sum + item.total_usd, 0).toFixed(2)}
+                          </span>
                         </div>
                       </div>
-                    ))}
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
 
-              {/* Freight Costs */}
-              {orderDetails.freightItems.length > 0 && (
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-3">International Shipping & Fees</h3>
-                  <div className="space-y-2">
-                    {orderDetails.freightItems.map((item: any, idx: number) => (
-                      <div key={idx} className="p-4 bg-amber-50 rounded-lg border border-amber-200">
-                        <div className="flex justify-between text-sm">
-                          <span className="text-gray-600">International Shipping:</span>
-                          <span className="font-medium">${item.international_shipping_usd.toFixed(2)} <span className="text-gray-500">(¥{item.international_shipping_cny.toFixed(2)})</span></span>
-                        </div>
-                        <div className="flex justify-between text-sm mt-2">
-                          <span className="text-gray-600">Service Fee:</span>
-                          <span className="font-medium">${item.service_fee_usd.toFixed(2)}</span>
+                {/* Freight Costs */}
+                {orderDetails.freightItems.length > 0 && (
+                  <div>
+                    <h3 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
+                      ✈️ International Shipping & Fees
+                    </h3>
+                    <div className="space-y-3">
+                      {orderDetails.freightItems.map((item: any, idx: number) => {
+                        const freightTotal = item.international_shipping_usd + item.service_fee_usd;
+                        return (
+                          <div key={idx} className="bg-gradient-to-br from-amber-50 to-amber-100 rounded-lg border-2 border-amber-300 p-4">
+                            <div className="space-y-2">
+                              <div className="flex justify-between items-center pb-2 border-b border-amber-300">
+                                <span className="font-semibold text-amber-900">Shipment #{idx + 1}</span>
+                                {item.weight && (
+                                  <span className="text-xs bg-amber-200 px-2 py-1 rounded font-semibold">
+                                    {item.weight}kg
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex justify-between text-sm">
+                                <span className="text-gray-700">🌍 International Shipping:</span>
+                                <div className="text-right">
+                                  <span className="font-bold text-gray-900">${item.international_shipping_usd.toFixed(2)}</span>
+                                  <span className="text-gray-500 text-xs ml-2">(¥{item.international_shipping_cny.toFixed(2)})</span>
+                                </div>
+                              </div>
+                              <div className="flex justify-between text-sm">
+                                <span className="text-gray-700">💼 Service Fee:</span>
+                                <span className="font-bold text-gray-900">${item.service_fee_usd.toFixed(2)}</span>
+                              </div>
+                              <div className="flex justify-between text-sm pt-2 border-t-2 border-amber-400">
+                                <span className="text-gray-900 font-bold">Freight Total:</span>
+                                <span className="font-bold text-amber-700 text-lg">${freightTotal.toFixed(2)}</span>
+                              </div>
+                              <div className="flex justify-between text-xs bg-purple-50 px-2 py-1 rounded">
+                                <span className="text-purple-700">Breakdown:</span>
+                                <span className="font-semibold text-purple-900">
+                                  {freightTotal > 0 ? ((item.international_shipping_usd / freightTotal) * 100).toFixed(1) : '0'}% shipping,{' '}
+                                  {freightTotal > 0 ? ((item.service_fee_usd / freightTotal) * 100).toFixed(1) : '0'}% fees
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                      <div className="bg-gradient-to-r from-amber-100 to-amber-200 rounded-lg border-2 border-amber-400 p-4">
+                        <div className="flex justify-between items-center">
+                          <span className="font-bold text-amber-900">Total Freight Costs:</span>
+                          <span className="font-bold text-amber-900 text-xl">
+                            ${orderDetails.freightItems.reduce((sum: number, item: any) => sum + item.international_shipping_usd + item.service_fee_usd, 0).toFixed(2)}
+                          </span>
                         </div>
                       </div>
-                    ))}
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
+              </div>
 
-              {/* Summary */}
-              <div className="bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-200 rounded-lg p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Order Summary</h3>
+              {/* Final Summary with Calculations */}
+              <div className="bg-gradient-to-br from-green-50 to-emerald-100 border-4 border-green-300 rounded-xl p-6 shadow-lg">
+                <h3 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+                  💰 Profitability Analysis
+                </h3>
                 <div className="space-y-3">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-700">Order Total (Revenue):</span>
-                    <span className="font-bold text-gray-900 text-lg">${orderDetails.order.total_price.toFixed(2)}</span>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div className="bg-white rounded-lg p-3 border border-green-200">
+                      <p className="text-gray-600 font-medium mb-1">Customer Revenue</p>
+                      <p className="font-bold text-emerald-600 text-2xl">${orderDetails.order.total_price.toFixed(2)}</p>
+                    </div>
+                    <div className="bg-white rounded-lg p-3 border border-green-200">
+                      <p className="text-gray-600 font-medium mb-1">Total SKUs</p>
+                      <p className="font-bold text-gray-900 text-2xl">{orderDetails.lineItems.length}</p>
+                    </div>
                   </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-700">Total Fulfillment Cost:</span>
-                    <span className="font-bold text-gray-900 text-lg">
-                      ${(
-                        orderDetails.commodityItems.reduce((sum: number, item: any) => sum + item.total_usd, 0) +
-                        orderDetails.freightItems.reduce((sum: number, item: any) => sum + item.international_shipping_usd + item.service_fee_usd, 0)
-                      ).toFixed(2)}
-                    </span>
+
+                  <div className="bg-white rounded-lg p-4 border-2 border-red-300">
+                    <p className="text-gray-700 font-semibold mb-2">Cost Breakdown:</p>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">📦 Product + Domestic:</span>
+                        <span className="font-bold text-red-700">
+                          ${orderDetails.commodityItems.reduce((sum: number, item: any) => sum + item.total_usd, 0).toFixed(2)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">✈️ International + Fees:</span>
+                        <span className="font-bold text-amber-700">
+                          ${orderDetails.freightItems.reduce((sum: number, item: any) => sum + item.international_shipping_usd + item.service_fee_usd, 0).toFixed(2)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between pt-2 border-t-2 border-red-400">
+                        <span className="text-gray-900 font-bold">Total Costs:</span>
+                        <span className="font-bold text-red-900 text-lg">
+                          ${(
+                            orderDetails.commodityItems.reduce((sum: number, item: any) => sum + item.total_usd, 0) +
+                            orderDetails.freightItems.reduce((sum: number, item: any) => sum + item.international_shipping_usd + item.service_fee_usd, 0)
+                          ).toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
                   </div>
-                  <div className="flex justify-between text-lg font-bold pt-3 border-t-2 border-green-300">
-                    <span className="text-gray-900">Net Profit:</span>
-                    <span className="text-emerald-600 text-2xl">
-                      ${(
-                        orderDetails.order.total_price -
-                        orderDetails.commodityItems.reduce((sum: number, item: any) => sum + item.total_usd, 0) -
-                        orderDetails.freightItems.reduce((sum: number, item: any) => sum + item.international_shipping_usd + item.service_fee_usd, 0)
-                      ).toFixed(2)}
-                    </span>
+
+                  <div className="bg-gradient-to-r from-green-200 to-emerald-200 rounded-lg p-4 border-2 border-green-400">
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <p className="text-green-900 font-bold text-lg">Net Profit</p>
+                        <p className="text-xs text-green-700 mt-1">Revenue - Total Costs</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-bold text-green-900 text-3xl">
+                          ${(
+                            orderDetails.order.total_price -
+                            orderDetails.commodityItems.reduce((sum: number, item: any) => sum + item.total_usd, 0) -
+                            orderDetails.freightItems.reduce((sum: number, item: any) => sum + item.international_shipping_usd + item.service_fee_usd, 0)
+                          ).toFixed(2)}
+                        </p>
+                        <p className="text-sm text-green-700 font-semibold mt-1">
+                          {orderDetails.order.total_price > 0 ? (
+                            ((orderDetails.order.total_price -
+                              orderDetails.commodityItems.reduce((sum: number, item: any) => sum + item.total_usd, 0) -
+                              orderDetails.freightItems.reduce((sum: number, item: any) => sum + item.international_shipping_usd + item.service_fee_usd, 0)
+                            ) / orderDetails.order.total_price * 100).toFixed(1)
+                          ) : '0.0'}% margin
+                        </p>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
