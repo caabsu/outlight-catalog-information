@@ -664,13 +664,39 @@ export default function OrdersPage() {
                 </div>
               </div>
 
+              {/* Data Completeness Warning */}
+              {(orderDetails.commodityItems.length === 0 || orderDetails.freightItems.length === 0) && (
+                <div className="bg-gradient-to-r from-yellow-50 to-amber-50 border-2 border-yellow-400 rounded-lg p-4">
+                  <div className="flex items-start gap-3">
+                    <span className="text-2xl">⚠️</span>
+                    <div>
+                      <h3 className="font-bold text-yellow-900 mb-1">Incomplete Invoice Data</h3>
+                      <ul className="text-sm text-yellow-800 space-y-1">
+                        {orderDetails.commodityItems.length === 0 && (
+                          <li>• No commodity invoice data found (product costs and domestic freight)</li>
+                        )}
+                        {orderDetails.freightItems.length === 0 && (
+                          <li>• No freight invoice data found (international shipping and service fees)</li>
+                        )}
+                        <li className="text-yellow-700 font-medium mt-2">
+                          → Profit calculations may be incomplete. Upload missing invoices for complete analysis.
+                        </li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Cost Breakdown Section */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Commodity Costs */}
-                {orderDetails.commodityItems.length > 0 && (
+                {orderDetails.commodityItems.length > 0 ? (
                   <div>
                     <h3 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
                       📦 Product & Domestic Shipping
+                      <span className="bg-green-100 text-green-700 text-xs font-semibold px-2 py-1 rounded">
+                        {orderDetails.commodityItems.length} item{orderDetails.commodityItems.length !== 1 ? 's' : ''}
+                      </span>
                     </h3>
                     <div className="space-y-3">
                       {orderDetails.commodityItems.map((item: any, idx: number) => {
@@ -724,13 +750,23 @@ export default function OrdersPage() {
                       </div>
                     </div>
                   </div>
+                ) : (
+                  <div className="bg-gray-100 border-2 border-gray-300 rounded-lg p-6 flex items-center justify-center">
+                    <div className="text-center">
+                      <p className="text-gray-500 font-medium">📦 No commodity data available</p>
+                      <p className="text-xs text-gray-400 mt-1">Upload commodity invoice to see costs</p>
+                    </div>
+                  </div>
                 )}
 
                 {/* Freight Costs */}
-                {orderDetails.freightItems.length > 0 && (
+                {orderDetails.freightItems.length > 0 ? (
                   <div>
                     <h3 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
                       ✈️ International Shipping & Fees
+                      <span className="bg-green-100 text-green-700 text-xs font-semibold px-2 py-1 rounded">
+                        {orderDetails.freightItems.length} shipment{orderDetails.freightItems.length !== 1 ? 's' : ''}
+                      </span>
                     </h3>
                     <div className="space-y-3">
                       {orderDetails.freightItems.map((item: any, idx: number) => {
@@ -782,6 +818,13 @@ export default function OrdersPage() {
                       </div>
                     </div>
                   </div>
+                ) : (
+                  <div className="bg-gray-100 border-2 border-gray-300 rounded-lg p-6 flex items-center justify-center">
+                    <div className="text-center">
+                      <p className="text-gray-500 font-medium">✈️ No freight data available</p>
+                      <p className="text-xs text-gray-400 mt-1">Upload freight invoice to see shipping costs</p>
+                    </div>
+                  </div>
                 )}
               </div>
 
@@ -795,24 +838,43 @@ export default function OrdersPage() {
                     <div className="bg-white rounded-lg p-3 border border-green-200">
                       <p className="text-gray-600 font-medium mb-1">Customer Revenue</p>
                       <p className="font-bold text-emerald-600 text-2xl">${orderDetails.order.total_price.toFixed(2)}</p>
+                      <p className="text-xs text-gray-500 mt-1">From Shopify order data</p>
                     </div>
                     <div className="bg-white rounded-lg p-3 border border-green-200">
                       <p className="text-gray-600 font-medium mb-1">Total SKUs</p>
                       <p className="font-bold text-gray-900 text-2xl">{orderDetails.lineItems.length}</p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        {orderDetails.lineItems.reduce((sum: any, item: any) => sum + item.quantity, 0)} total units
+                      </p>
                     </div>
                   </div>
 
                   <div className="bg-white rounded-lg p-4 border-2 border-red-300">
-                    <p className="text-gray-700 font-semibold mb-2">Cost Breakdown:</p>
+                    <p className="text-gray-700 font-semibold mb-3 flex items-center gap-2">
+                      Cost Breakdown:
+                      <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded font-normal">
+                        From Invoice Data
+                      </span>
+                    </p>
                     <div className="space-y-2 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">📦 Product + Domestic:</span>
+                      <div className="flex justify-between items-center">
+                        <div>
+                          <span className="text-gray-600">📦 Product + Domestic Freight:</span>
+                          <p className="text-xs text-gray-500 ml-5">
+                            {orderDetails.commodityItems.length} commodity item{orderDetails.commodityItems.length !== 1 ? 's' : ''}
+                          </p>
+                        </div>
                         <span className="font-bold text-red-700">
                           ${orderDetails.commodityItems.reduce((sum: number, item: any) => sum + item.total_usd, 0).toFixed(2)}
                         </span>
                       </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">✈️ International + Fees:</span>
+                      <div className="flex justify-between items-center">
+                        <div>
+                          <span className="text-gray-600">✈️ International Shipping + Service Fees:</span>
+                          <p className="text-xs text-gray-500 ml-5">
+                            {orderDetails.freightItems.length} freight record{orderDetails.freightItems.length !== 1 ? 's' : ''}
+                          </p>
+                        </div>
                         <span className="font-bold text-amber-700">
                           ${orderDetails.freightItems.reduce((sum: number, item: any) => sum + item.international_shipping_usd + item.service_fee_usd, 0).toFixed(2)}
                         </span>
@@ -852,6 +914,29 @@ export default function OrdersPage() {
                           ) : '0.0'}% margin
                         </p>
                       </div>
+                    </div>
+                  </div>
+
+                  {/* Detailed Calculation Formula */}
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs">
+                    <p className="font-semibold text-blue-900 mb-2">📊 Calculation Verification:</p>
+                    <div className="space-y-1 text-blue-800 font-mono">
+                      <p>Revenue: ${orderDetails.order.total_price.toFixed(2)}</p>
+                      <p>− Commodity Costs: ${orderDetails.commodityItems.reduce((sum: number, item: any) => sum + item.total_usd, 0).toFixed(2)}</p>
+                      <p>− Freight Costs: ${orderDetails.freightItems.reduce((sum: number, item: any) => sum + item.international_shipping_usd + item.service_fee_usd, 0).toFixed(2)}</p>
+                      <p className="border-t border-blue-300 pt-1 mt-1">
+                        = Net Profit: ${(
+                          orderDetails.order.total_price -
+                          orderDetails.commodityItems.reduce((sum: number, item: any) => sum + item.total_usd, 0) -
+                          orderDetails.freightItems.reduce((sum: number, item: any) => sum + item.international_shipping_usd + item.service_fee_usd, 0)
+                        ).toFixed(2)}
+                        ({orderDetails.order.total_price > 0 ? (
+                          ((orderDetails.order.total_price -
+                            orderDetails.commodityItems.reduce((sum: number, item: any) => sum + item.total_usd, 0) -
+                            orderDetails.freightItems.reduce((sum: number, item: any) => sum + item.international_shipping_usd + item.service_fee_usd, 0)
+                          ) / orderDetails.order.total_price * 100).toFixed(1)
+                        ) : '0.0'}%)
+                      </p>
                     </div>
                   </div>
                 </div>

@@ -8,7 +8,8 @@
       "Bash(git push:*)",
       "Bash(find:*)",
       "Bash(git commit -m \"$(cat <<''EOF''\nfeat: Enhanced order details & product cost analysis\n\n✅ Orders Page - Complete Detail Modal Overhaul:\n- Added 4-metric summary banner (Revenue, Costs, Profit, Margin%)\n- Enhanced product details grid with SKU, Quantity, Unit Price, Discounts\n- Detailed cost breakdown for commodity items (Product Cost + Domestic Freight)\n- Detailed freight breakdown (International Shipping + Service Fees)\n- Visual percentage breakdowns for each cost component\n- Professional gradient UI with color-coded sections\n- Complete profitability analysis with margin calculations\n\n🗑️ Removed Obsolete:\n- Deleted app/items/page.tsx (redundant with unified products view)\n\n📊 Database Updates:\n- DATABASE_PRODUCT_FIX.sql: Smart SKU matching for product costs\n- Only includes single-SKU orders (most reliable data)\n- Cost breakdown: Item Cost + Shipping Cost\n- Filters out multi-SKU orders to avoid allocation errors\n\n🎯 Result: Professional, data-driven order analysis with complete cost transparency\n\n🤖 Generated with Claude Code (https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(cat:*)"
     ],
     "deny": [],
     "ask": []

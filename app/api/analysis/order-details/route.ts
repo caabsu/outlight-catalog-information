@@ -37,24 +37,40 @@ export async function GET(request: NextRequest) {
       console.error('Error fetching line items:', lineItemsError);
     }
 
-    // Fetch commodity items
-    const { data: commodityItems, error: commodityError } = await supabaseAdmin
+    // Fetch commodity items - try both with and without # prefix
+    let commodityItems: any[] = [];
+    const { data: commodityData1, error: commodityError1 } = await supabaseAdmin
       .from('invoice_commodity_items')
       .select('*')
       .eq('order_number', orderNumber);
 
-    if (commodityError) {
-      console.error('Error fetching commodity items:', commodityError);
+    const { data: commodityData2, error: commodityError2 } = await supabaseAdmin
+      .from('invoice_commodity_items')
+      .select('*')
+      .eq('order_number', `#${orderNumber}`);
+
+    commodityItems = [...(commodityData1 || []), ...(commodityData2 || [])];
+
+    if (commodityError1 && commodityError2) {
+      console.error('Error fetching commodity items:', commodityError1 || commodityError2);
     }
 
-    // Fetch freight items
-    const { data: freightItems, error: freightError } = await supabaseAdmin
+    // Fetch freight items - try both with and without # prefix
+    let freightItems: any[] = [];
+    const { data: freightData1, error: freightError1 } = await supabaseAdmin
       .from('invoice_freight_items')
       .select('*')
       .eq('order_number', orderNumber);
 
-    if (freightError) {
-      console.error('Error fetching freight items:', freightError);
+    const { data: freightData2, error: freightError2 } = await supabaseAdmin
+      .from('invoice_freight_items')
+      .select('*')
+      .eq('order_number', `#${orderNumber}`);
+
+    freightItems = [...(freightData1 || []), ...(freightData2 || [])];
+
+    if (freightError1 && freightError2) {
+      console.error('Error fetching freight items:', freightError1 || freightError2);
     }
 
     return NextResponse.json({
