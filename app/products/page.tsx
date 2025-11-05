@@ -23,6 +23,9 @@ export default function ProductsPage() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedProducts, setExpandedProducts] = useState<Set<string>>(new Set());
+  const [selectedSku, setSelectedSku] = useState<string | null>(null);
+  const [skuDetails, setSkuDetails] = useState<any>(null);
+  const [loadingDetails, setLoadingDetails] = useState(false);
 
   // Filters and pagination
   const [activeTab, setActiveTab] = useState<TabType>('all');
@@ -49,6 +52,23 @@ export default function ProductsPage() {
       console.error('Error fetching products:', error);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function fetchSkuDetails(sku: string) {
+    try {
+      setLoadingDetails(true);
+      setSelectedSku(sku);
+      const res = await fetch(`/api/analysis/product-details?sku=${encodeURIComponent(sku)}`);
+      const data = await res.json();
+
+      if (data.success) {
+        setSkuDetails(data.data);
+      }
+    } catch (error) {
+      console.error('Error fetching SKU details:', error);
+    } finally {
+      setLoadingDetails(false);
     }
   }
 
@@ -536,8 +556,17 @@ export default function ProductsPage() {
                           <tr key={sku.sku} className="bg-gray-50 border-l-4 border-gray-300">
                             <td className="px-4 py-3"></td>
                             <td className="px-6 py-3">
-                              <div className="pl-4">
+                              <div className="pl-4 flex items-center justify-between">
                                 <div className="text-sm text-gray-700 font-medium">↳ {sku.sku}</div>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    fetchSkuDetails(sku.sku);
+                                  }}
+                                  className="ml-2 px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded transition-colors"
+                                >
+                                  View Details →
+                                </button>
                               </div>
                             </td>
                             <td className="px-6 py-3 whitespace-nowrap text-sm text-gray-700 text-right">
@@ -628,6 +657,237 @@ export default function ProductsPage() {
           </>
         )}
       </div>
+
+      {/* SKU Details Modal */}
+      {selectedSku && skuDetails && (
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl max-w-7xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
+            {/* Header */}
+            <div className="sticky top-0 bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-6 py-5 flex justify-between items-center rounded-t-xl">
+              <div>
+                <h2 className="text-2xl font-bold">SKU: {selectedSku}</h2>
+                <p className="text-sm text-indigo-100 mt-1">
+                  Invoice-Level Cost Analysis
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setSelectedSku(null);
+                  setSkuDetails(null);
+                }}
+                className="text-white hover:bg-white hover:bg-opacity-20 rounded-full p-2 transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* Summary Cards */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-4 border border-blue-200">
+                  <p className="text-xs font-semibold text-blue-900 uppercase">Total Orders</p>
+                  <p className="text-2xl font-bold text-blue-700 mt-1">{skuDetails.summary.totalOrders}</p>
+                  <p className="text-xs text-blue-600 mt-1">
+                    {skuDetails.summary.ordersWithInvoices} with invoices
+                  </p>
+                </div>
+                <div className="bg-gradient-to-br from-emerald-50 to-emerald-100 rounded-lg p-4 border border-emerald-200">
+                  <p className="text-xs font-semibold text-emerald-900 uppercase">Revenue</p>
+                  <p className="text-2xl font-bold text-emerald-700 mt-1">
+                    ${skuDetails.summary.totalRevenue.toFixed(2)}
+                  </p>
+                </div>
+                <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-lg p-4 border border-red-200">
+                  <p className="text-xs font-semibold text-red-900 uppercase">Total Cost</p>
+                  <p className="text-2xl font-bold text-red-700 mt-1">
+                    ${skuDetails.summary.totalCost.toFixed(2)}
+                  </p>
+                  <p className="text-xs text-red-600 mt-1">
+                    ${skuDetails.summary.totalCommodityCost.toFixed(2)} + ${skuDetails.summary.totalFreightCost.toFixed(2)}
+                  </p>
+                </div>
+                <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-4 border border-green-200">
+                  <p className="text-xs font-semibold text-green-900 uppercase">Net Profit</p>
+                  <p className="text-2xl font-bold text-green-700 mt-1">
+                    ${skuDetails.summary.totalProfit.toFixed(2)}
+                  </p>
+                  <p className="text-xs text-green-600 mt-1">
+                    {skuDetails.summary.avgMargin.toFixed(1)}% margin
+                  </p>
+                </div>
+              </div>
+
+              {/* Orders List */}
+              <div>
+                <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+                  📋 All Orders with Invoice Details
+                </h3>
+                <div className="space-y-4">
+                  {skuDetails.orders.map((orderData: any, idx: number) => {
+                    const lineTotal = (orderData.orderItem.price * orderData.orderItem.quantity) - orderData.orderItem.total_discount;
+                    const commodityTotal = orderData.commodityItems.reduce((sum: number, c: any) => sum + (c.total_usd || 0), 0);
+                    const freightTotal = orderData.freightItems.reduce((sum: number, f: any) => sum + (f.international_shipping_usd || 0) + (f.service_fee_usd || 0), 0);
+                    const totalCost = commodityTotal + freightTotal;
+                    const profit = lineTotal - totalCost;
+                    const margin = lineTotal > 0 ? (profit / lineTotal * 100) : 0;
+
+                    return (
+                      <div key={idx} className={`border-2 rounded-lg p-4 ${orderData.hasInvoiceData ? 'bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-300' : 'bg-gray-100 border-gray-300'}`}>
+                        {/* Order Header */}
+                        <div className="flex items-start justify-between mb-3">
+                          <div>
+                            <h4 className="font-bold text-gray-900 text-lg">
+                              Order {orderData.order.order_name}
+                            </h4>
+                            <p className="text-sm text-gray-600 mt-1">
+                              {new Date(orderData.order.created_at).toLocaleDateString('en-US', {
+                                year: 'numeric',
+                                month: 'long',
+                                day: 'numeric'
+                              })}
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-xs text-gray-600">Quantity</div>
+                            <div className="text-xl font-bold text-gray-900">{orderData.orderItem.quantity} units</div>
+                          </div>
+                        </div>
+
+                        {!orderData.hasInvoiceData ? (
+                          <div className="bg-yellow-50 border border-yellow-300 rounded p-3 text-center">
+                            <p className="text-yellow-800 font-semibold">⚠️ No invoice data available for this order</p>
+                          </div>
+                        ) : (
+                          <>
+                            {/* Revenue Section */}
+                            <div className="bg-white rounded-lg p-3 mb-3 border border-emerald-200">
+                              <div className="text-xs font-semibold text-gray-600 uppercase mb-2">💰 Revenue</div>
+                              <div className="grid grid-cols-2 gap-3 text-sm">
+                                <div>
+                                  <p className="text-gray-600">Unit Price:</p>
+                                  <p className="font-bold text-gray-900">${orderData.orderItem.price.toFixed(2)}</p>
+                                </div>
+                                <div>
+                                  <p className="text-gray-600">Discount:</p>
+                                  <p className="font-bold text-red-600">-${orderData.orderItem.total_discount.toFixed(2)}</p>
+                                </div>
+                              </div>
+                              <div className="mt-2 pt-2 border-t border-emerald-200">
+                                <p className="text-gray-700 font-semibold">Line Total: <span className="text-emerald-600 text-lg">${lineTotal.toFixed(2)}</span></p>
+                              </div>
+                            </div>
+
+                            {/* Invoice Data Section */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3">
+                              {/* Commodity Invoices */}
+                              <div className="bg-white rounded-lg p-3 border border-gray-300">
+                                <div className="text-xs font-semibold text-gray-600 uppercase mb-2 flex items-center justify-between">
+                                  <span>📦 Commodity Invoices</span>
+                                  <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded">{orderData.commodityItems.length}</span>
+                                </div>
+                                <div className="space-y-2">
+                                  {orderData.commodityItems.map((item: any, i: number) => (
+                                    <div key={i} className="bg-gray-50 rounded p-2 text-xs">
+                                      <div className="flex justify-between items-start mb-1">
+                                        <span className="font-semibold text-gray-700">Invoice #{item.id}</span>
+                                        <span className="text-gray-500">Upload #{item.upload_id}</span>
+                                      </div>
+                                      <div className="grid grid-cols-2 gap-2 mt-2">
+                                        <div>
+                                          <p className="text-gray-600">Product Cost:</p>
+                                          <p className="font-bold text-gray-900">${item.price_usd.toFixed(2)}</p>
+                                          <p className="text-gray-500">¥{item.price_cny.toFixed(2)}</p>
+                                        </div>
+                                        <div>
+                                          <p className="text-gray-600">Domestic Freight:</p>
+                                          <p className="font-bold text-gray-900">${item.domestic_freight_usd.toFixed(2)}</p>
+                                          <p className="text-gray-500">¥{item.domestic_freight_cny.toFixed(2)}</p>
+                                        </div>
+                                      </div>
+                                      <div className="mt-2 pt-2 border-t border-gray-300">
+                                        <p className="font-bold text-red-700">Total: ${item.total_usd.toFixed(2)} <span className="text-gray-500 font-normal">(¥{item.total_cny.toFixed(2)})</span></p>
+                                      </div>
+                                    </div>
+                                  ))}
+                                  <div className="bg-red-100 rounded p-2 border border-red-300">
+                                    <p className="font-bold text-red-900">Commodity Total: ${commodityTotal.toFixed(2)}</p>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Freight Invoices */}
+                              <div className="bg-white rounded-lg p-3 border border-gray-300">
+                                <div className="text-xs font-semibold text-gray-600 uppercase mb-2 flex items-center justify-between">
+                                  <span>✈️ Freight Invoices</span>
+                                  <span className="bg-amber-100 text-amber-700 px-2 py-0.5 rounded">{orderData.freightItems.length}</span>
+                                </div>
+                                <div className="space-y-2">
+                                  {orderData.freightItems.map((item: any, i: number) => (
+                                    <div key={i} className="bg-gray-50 rounded p-2 text-xs">
+                                      <div className="flex justify-between items-start mb-1">
+                                        <span className="font-semibold text-gray-700">Invoice #{item.id}</span>
+                                        <span className="text-gray-500">Upload #{item.upload_id}</span>
+                                      </div>
+                                      {item.weight && (
+                                        <div className="text-gray-600 mb-2">Weight: <span className="font-semibold">{item.weight}kg</span></div>
+                                      )}
+                                      <div className="grid grid-cols-2 gap-2">
+                                        <div>
+                                          <p className="text-gray-600">International:</p>
+                                          <p className="font-bold text-gray-900">${item.international_shipping_usd.toFixed(2)}</p>
+                                          <p className="text-gray-500">¥{item.international_shipping_cny.toFixed(2)}</p>
+                                        </div>
+                                        <div>
+                                          <p className="text-gray-600">Service Fee:</p>
+                                          <p className="font-bold text-gray-900">${item.service_fee_usd.toFixed(2)}</p>
+                                        </div>
+                                      </div>
+                                      <div className="mt-2 pt-2 border-t border-gray-300">
+                                        <p className="font-bold text-amber-700">Total: ${(item.international_shipping_usd + item.service_fee_usd).toFixed(2)}</p>
+                                      </div>
+                                    </div>
+                                  ))}
+                                  <div className="bg-amber-100 rounded p-2 border border-amber-300">
+                                    <p className="font-bold text-amber-900">Freight Total: ${freightTotal.toFixed(2)}</p>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Profitability Summary */}
+                            <div className="bg-gradient-to-r from-green-100 to-emerald-100 rounded-lg p-4 border-2 border-green-300">
+                              <div className="grid grid-cols-3 gap-4 text-center">
+                                <div>
+                                  <p className="text-xs text-green-800 font-semibold uppercase">Total Cost</p>
+                                  <p className="text-xl font-bold text-red-700 mt-1">${totalCost.toFixed(2)}</p>
+                                </div>
+                                <div>
+                                  <p className="text-xs text-green-800 font-semibold uppercase">Net Profit</p>
+                                  <p className={`text-xl font-bold mt-1 ${profit >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                                    ${profit.toFixed(2)}
+                                  </p>
+                                </div>
+                                <div>
+                                  <p className="text-xs text-green-800 font-semibold uppercase">Margin</p>
+                                  <p className={`text-xl font-bold mt-1 ${margin >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                                    {margin.toFixed(1)}%
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
