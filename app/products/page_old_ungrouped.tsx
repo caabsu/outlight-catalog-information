@@ -1,32 +1,23 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { ProductCostAnalysis } from '@/lib/types';
+import { ProductCostAnalysis, SKUProfitabilitySummary } from '@/lib/types';
 
 type TabType = 'all' | 'high-margin' | 'low-margin' | 'top-sellers' | 'no-data';
-type SortField = 'product_title' | 'total_revenue' | 'total_profit' | 'profit_margin' | 'total_quantity_sold' | 'order_count';
+type SortField = 'sku' | 'product_title' | 'order_count' | 'total_quantity_sold' | 'total_revenue' | 'avg_selling_price_usd' | 'avg_unit_cost_usd' | 'total_profit' | 'avg_profit_per_unit_usd' | 'profit_margin';
 type SortOrder = 'asc' | 'desc';
-
-interface ProductGroup {
-  product_title: string;
-  skus: ProductCostAnalysis[];
-  total_quantity_sold: number;
-  total_revenue: number;
-  total_cost: number;
-  total_profit: number;
-  avg_margin: number;
-  order_count: number;
-}
 
 export default function ProductsPage() {
   const [products, setProducts] = useState<ProductCostAnalysis[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [expandedProducts, setExpandedProducts] = useState<Set<string>>(new Set());
+  const [expandedSKUs, setExpandedSKUs] = useState<Set<string>>(new Set());
+  const [skuDetails, setSkuDetails] = useState<Map<string, any[]>>(new Map());
+  const [loadingDetails, setLoadingDetails] = useState<Set<string>>(new Set());
 
   // Filters and pagination
   const [activeTab, setActiveTab] = useState<TabType>('all');
-  const [sortField, setSortField] = useState<SortField>('total_revenue');
+  const [sortField, setSortField] = useState<SortField>('total_quantity_sold');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(25);
@@ -52,57 +43,85 @@ export default function ProductsPage() {
     }
   }
 
-  function toggleProductExpand(productTitle: string) {
-    setExpandedProducts(prev => {
-      const next = new Set(prev);
-      if (next.has(productTitle)) {
-        next.delete(productTitle);
-      } else {
-        next.add(productTitle);
+  async function fetchSKUDetails(sku: string) {
+    if (skuDetails.has(sku)) return;
+
+    setLoadingDetails(prev => new Set(prev).add(sku));
+
+    try {
+      const res = await fetch(`/api/analysis/items?sku=${encodeURIComponent(sku)}`);
+      const data = await res.json();
+
+      if (data.success && data.data?.items) {
+        setSkuDetails(prev => new Map(prev).set(sku, data.data.items));
       }
-      return next;
-    });
+    } catch (error) {
+      console.error('Error fetching SKU details:', error);
+    } finally {
+      setLoadingDetails(prev => {
+        const next = new Set(prev);
+        next.delete(sku);
+        return next;
+      });
+    }
   }
 
-  // Group products by product_title
-  const groupProductsByTitle = (productsList: ProductCostAnalysis[]): ProductGroup[] => {
-    const grouped = new Map<string, ProductCostAnalysis[]>();
+  function toggleSKUExpand(sku: string) {
+    const isExpanded = expandedSKUs.has(sku);
 
-    productsList.forEach(product => {
-      if (!grouped.has(product.product_title)) {
-        grouped.set(product.product_title, []);
-      }
-      grouped.get(product.product_title)!.push(product);
-    });
+    if (isExpanded) {
+      setExpandedSKUs(prev => {
+        const next = new Set(prev);
+        next.delete(sku);
+        return next;
+      });
+    } else {
+      setExpandedSKUs(prev => new Set(prev).add(sku));
+      fetchSKUDetails(sku);
+    }
+  }
 
-    return Array.from(grouped.entries()).map(([product_title, skus]) => {
-      const total_quantity_sold = skus.reduce((sum, p) => sum + (p.total_quantity_sold || 0), 0);
-      const total_revenue = skus.reduce((sum, p) => sum + (p.total_revenue_usd || 0), 0);
-      const total_cost = skus.reduce((sum, p) => sum + ((p.avg_unit_cost_usd || 0) * (p.total_quantity_sold || 0)), 0);
-      const total_profit = skus.reduce((sum, p) => sum + ((p.avg_profit_per_unit_usd || 0) * (p.total_quantity_sold || 0)), 0);
-      const avg_margin = total_revenue > 0 ? (total_profit / total_revenue) * 100 : 0;
-      const order_count = skus.reduce((sum, p) => sum + (p.order_count || 0), 0);
-
-      return {
-        product_title,
-        skus,
-        total_quantity_sold,
-        total_revenue,
-        total_cost,
-        total_profit,
-        avg_margin,
-        order_count,
-      };
-    });
+  // Calculate profit margin for filtering
+  const getMarginPercentage = (product: ProductCostAnalysis): number => {
+    if (!product.avg_selling_price_usd || product.avg_selling_price_usd === 0) return 0;
+    const profit = product.avg_profit_per_unit_usd || 0;
+    const price = product.avg_selling_price_usd || 0;
+    return (profit / price) * 100;
   };
 
-  // Filter product groups
-  const getFilteredProductGroups = () => {
+  const getTotalRevenue = (product: ProductCostAnalysis): number => {
+    return (product.avg_selling_price_usd || 0) * (product.total_quantity_sold || 0);
+  };
+
+  const getTotalProfit = (product: ProductCostAnalysis): number => {
+    return (product.avg_profit_per_unit_usd || 0) * (product.total_quantity_sold || 0);
+  };
+
+  const getTotalCost = (product: ProductCostAnalysis): number => {
+    return (product.avg_unit_cost_usd || 0) * (product.total_quantity_sold || 0);
+  };
+
+  // Filter products based on active tab and filters
+  const getFilteredProducts = () => {
     let filtered = [...products];
 
-    // Hide zero cost filter
-    if (hideZeroCost) {
-      filtered = filtered.filter(p => (p.avg_unit_cost_usd || 0) > 0);
+    // Tab filter
+    switch (activeTab) {
+      case 'high-margin':
+        filtered = filtered.filter(p => getMarginPercentage(p) >= 30);
+        break;
+      case 'low-margin':
+        filtered = filtered.filter(p => {
+          const margin = getMarginPercentage(p);
+          return margin > 0 && margin < 15;
+        });
+        break;
+      case 'top-sellers':
+        filtered = filtered.filter(p => (p.total_quantity_sold || 0) >= 10);
+        break;
+      case 'no-data':
+        filtered = filtered.filter(p => (p.avg_unit_cost_usd || 0) === 0);
+        break;
     }
 
     // Search filter
@@ -113,81 +132,67 @@ export default function ProductsPage() {
       );
     }
 
-    // Group by product title
-    let groups = groupProductsByTitle(filtered);
-
-    // Tab filter (applied to groups)
-    switch (activeTab) {
-      case 'high-margin':
-        groups = groups.filter(g => g.avg_margin >= 30);
-        break;
-      case 'low-margin':
-        groups = groups.filter(g => g.avg_margin > 0 && g.avg_margin < 15);
-        break;
-      case 'top-sellers':
-        groups = groups.filter(g => g.total_quantity_sold >= 10);
-        break;
-      case 'no-data':
-        groups = groups.filter(g => g.total_cost === 0);
-        break;
+    // Hide zero cost filter
+    if (hideZeroCost) {
+      filtered = filtered.filter(p => (p.avg_unit_cost_usd || 0) > 0);
     }
 
-    // Sort groups
-    groups.sort((a, b) => {
+    // Sort
+    filtered.sort((a, b) => {
       let aVal: any, bVal: any;
 
       switch (sortField) {
+        case 'total_revenue':
+          aVal = getTotalRevenue(a);
+          bVal = getTotalRevenue(b);
+          break;
+        case 'total_profit':
+          aVal = getTotalProfit(a);
+          bVal = getTotalProfit(b);
+          break;
+        case 'profit_margin':
+          aVal = getMarginPercentage(a);
+          bVal = getMarginPercentage(b);
+          break;
+        case 'sku':
         case 'product_title':
-          aVal = a.product_title;
-          bVal = b.product_title;
+          aVal = String(a[sortField] || '');
+          bVal = String(b[sortField] || '');
           return sortOrder === 'asc'
             ? aVal.localeCompare(bVal)
             : bVal.localeCompare(aVal);
-        case 'total_revenue':
-          aVal = a.total_revenue;
-          bVal = b.total_revenue;
-          break;
-        case 'total_profit':
-          aVal = a.total_profit;
-          bVal = b.total_profit;
-          break;
-        case 'profit_margin':
-          aVal = a.avg_margin;
-          bVal = b.avg_margin;
-          break;
-        case 'total_quantity_sold':
-          aVal = a.total_quantity_sold;
-          bVal = b.total_quantity_sold;
-          break;
-        case 'order_count':
-          aVal = a.order_count;
-          bVal = b.order_count;
-          break;
         default:
-          aVal = 0;
-          bVal = 0;
+          aVal = Number(a[sortField] || 0);
+          bVal = Number(b[sortField] || 0);
       }
 
       return sortOrder === 'asc' ? aVal - bVal : bVal - aVal;
     });
 
-    return groups;
+    return filtered;
   };
 
-  const filteredProductGroups = getFilteredProductGroups();
+  const filteredProducts = getFilteredProducts();
 
   // Pagination
-  const totalPages = Math.ceil(filteredProductGroups.length / itemsPerPage);
+  const totalPages = Math.ceil(filteredProducts.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
-  const paginatedGroups = filteredProductGroups.slice(startIndex, endIndex);
+  const paginatedProducts = filteredProducts.slice(startIndex, endIndex);
 
   // Summary calculations
-  const totalUnits = filteredProductGroups.reduce((sum, g) => sum + g.total_quantity_sold, 0);
-  const totalRevenue = filteredProductGroups.reduce((sum, g) => sum + g.total_revenue, 0);
-  const totalCosts = filteredProductGroups.reduce((sum, g) => sum + g.total_cost, 0);
-  const totalProfit = filteredProductGroups.reduce((sum, g) => sum + g.total_profit, 0);
+  const totalUnits = filteredProducts.reduce((sum, p) => sum + (p.total_quantity_sold || 0), 0);
+  const totalRevenue = filteredProducts.reduce((sum, p) => sum + getTotalRevenue(p), 0);
+  const totalCosts = filteredProducts.reduce((sum, p) => sum + getTotalCost(p), 0);
+  const totalProfit = filteredProducts.reduce((sum, p) => sum + getTotalProfit(p), 0);
   const overallMargin = totalRevenue > 0 ? (totalProfit / totalRevenue) * 100 : 0;
+
+  const getProfitColor = (profitPerUnit: number) => {
+    if (profitPerUnit >= 10) return 'text-emerald-600 bg-emerald-50 border-emerald-200';
+    if (profitPerUnit >= 5) return 'text-amber-600 bg-amber-50 border-amber-200';
+    if (profitPerUnit >= 0) return 'text-blue-600 bg-blue-50 border-blue-200';
+    return 'text-red-600 bg-red-50 border-red-200';
+  };
 
   const getMarginColor = (margin: number) => {
     if (margin >= 30) return 'text-emerald-700 bg-emerald-100 border-emerald-300';
@@ -233,8 +238,8 @@ export default function ProductsPage() {
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Product Profitability Analysis</h1>
-          <p className="mt-2 text-gray-700 font-medium">
-            {filteredProductGroups.length} products • {totalUnits.toLocaleString()} units sold • ${totalRevenue.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})} revenue
+          <p className="mt-2 text-gray-700">
+            {filteredProducts.length} products • {totalUnits.toLocaleString()} units sold • ${totalRevenue.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})} revenue
           </p>
         </div>
         <button
@@ -254,7 +259,7 @@ export default function ProductsPage() {
         <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg shadow-md p-6 border border-blue-200">
           <p className="text-sm font-semibold text-blue-900 uppercase tracking-wide">Products</p>
           <p className="mt-2 text-4xl font-bold text-blue-900">
-            {filteredProductGroups.length}
+            {filteredProducts.length}
           </p>
           <p className="mt-1 text-xs text-blue-700">{totalUnits.toLocaleString()} units total</p>
         </div>
@@ -292,13 +297,14 @@ export default function ProductsPage() {
       <div className="border-b border-gray-200 bg-white rounded-t-lg shadow-sm">
         <nav className="-mb-px flex space-x-8 px-6">
           {[
-            { id: 'all', label: 'All Products', count: groupProductsByTitle(products).length, icon: '📦' },
-            { id: 'high-margin', label: 'High Margin (≥30%)', count: groupProductsByTitle(products).filter(g => g.avg_margin >= 30).length, icon: '🎯' },
-            { id: 'low-margin', label: 'Low Margin (<15%)', count: groupProductsByTitle(products).filter(g => {
-              return g.avg_margin > 0 && g.avg_margin < 15;
+            { id: 'all', label: 'All Products', count: products.length, icon: '📦' },
+            { id: 'high-margin', label: 'High Margin (≥30%)', count: products.filter(p => getMarginPercentage(p) >= 30).length, icon: '🎯' },
+            { id: 'low-margin', label: 'Low Margin (<15%)', count: products.filter(p => {
+              const margin = getMarginPercentage(p);
+              return margin > 0 && margin < 15;
             }).length, icon: '⚠️' },
-            { id: 'top-sellers', label: 'Top Sellers (10+)', count: groupProductsByTitle(products).filter(g => g.total_quantity_sold >= 10).length, icon: '⭐' },
-            { id: 'no-data', label: 'Missing Data', count: groupProductsByTitle(products).filter(g => g.total_cost === 0).length, icon: '❓' },
+            { id: 'top-sellers', label: 'Top Sellers (10+)', count: products.filter(p => (p.total_quantity_sold || 0) >= 10).length, icon: '⭐' },
+            { id: 'no-data', label: 'Missing Data', count: products.filter(p => (p.avg_unit_cost_usd || 0) === 0).length, icon: '❓' },
           ].map((tab) => (
             <button
               key={tab.id}
@@ -334,7 +340,7 @@ export default function ProductsPage() {
             <label className="block text-sm font-semibold text-gray-900 mb-1">🔍 Search Products</label>
             <input
               type="text"
-              placeholder="Search by product name or SKU..."
+              placeholder="Search by SKU or product name..."
               value={searchTerm}
               onChange={(e) => {
                 setSearchTerm(e.target.value);
@@ -366,8 +372,14 @@ export default function ProductsPage() {
               <option value="total_quantity_sold-asc">📦 Units Sold (Low to High)</option>
               <option value="order_count-desc">🛒 Order Count (High to Low)</option>
               <option value="order_count-asc">🛒 Order Count (Low to High)</option>
-              <option value="product_title-asc">🔤 Product Name (A-Z)</option>
-              <option value="product_title-desc">🔤 Product Name (Z-A)</option>
+              <option value="avg_selling_price_usd-desc">💵 Price (High to Low)</option>
+              <option value="avg_selling_price_usd-asc">💵 Price (Low to High)</option>
+              <option value="avg_unit_cost_usd-desc">🏷️ Cost (High to Low)</option>
+              <option value="avg_unit_cost_usd-asc">🏷️ Cost (Low to High)</option>
+              <option value="sku-asc">🔤 SKU (A-Z)</option>
+              <option value="sku-desc">🔤 SKU (Z-A)</option>
+              <option value="product_title-asc">📝 Name (A-Z)</option>
+              <option value="product_title-desc">📝 Name (Z-A)</option>
             </select>
           </div>
         </div>
@@ -399,7 +411,7 @@ export default function ProductsPage() {
             <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
             <p className="mt-4 text-gray-600 font-medium">Loading products...</p>
           </div>
-        ) : filteredProductGroups.length === 0 ? (
+        ) : filteredProducts.length === 0 ? (
           <div className="p-12 text-center">
             <p className="text-gray-600 text-lg font-medium">No products found matching your filters.</p>
             <p className="text-gray-500 text-sm mt-2">Try adjusting your search or filter criteria.</p>
@@ -447,8 +459,23 @@ export default function ProductsPage() {
                         {getSortIcon('total_revenue')}
                       </div>
                     </th>
-                    <th className="px-6 py-3 text-right text-xs font-bold text-gray-700 uppercase tracking-wider">
-                      Avg Cost/Unit
+                    <th
+                      className="px-6 py-3 text-right text-xs font-bold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-200 transition-colors"
+                      onClick={() => handleColumnSort('avg_selling_price_usd')}
+                    >
+                      <div className="flex items-center justify-end gap-2">
+                        <span>Price/Unit</span>
+                        {getSortIcon('avg_selling_price_usd')}
+                      </div>
+                    </th>
+                    <th
+                      className="px-6 py-3 text-right text-xs font-bold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-200 transition-colors"
+                      onClick={() => handleColumnSort('avg_unit_cost_usd')}
+                    >
+                      <div className="flex items-center justify-end gap-2">
+                        <span>Cost/Unit</span>
+                        {getSortIcon('avg_unit_cost_usd')}
+                      </div>
                     </th>
                     <th
                       className="px-6 py-3 text-right text-xs font-bold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-200 transition-colors"
@@ -471,20 +498,25 @@ export default function ProductsPage() {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {paginatedGroups.map((group) => {
-                    const isExpanded = expandedProducts.has(group.product_title);
-                    const avgCostPerUnit = group.total_quantity_sold > 0 ? group.total_cost / group.total_quantity_sold : 0;
+                  {paginatedProducts.map((product) => {
+                    const margin = getMarginPercentage(product);
+                    const revenue = getTotalRevenue(product);
+                    const profit = getTotalProfit(product);
+                    const cost = getTotalCost(product);
+                    const isExpanded = expandedSKUs.has(product.sku);
+                    const details = skuDetails.get(product.sku) || [];
+                    const isLoadingDetails = loadingDetails.has(product.sku);
+                    const hasData = (product.avg_unit_cost_usd || 0) > 0;
 
                     return (
                       <>
-                        {/* Product Group Row */}
                         <tr
-                          key={group.product_title}
-                          onClick={() => toggleProductExpand(group.product_title)}
-                          className="hover:bg-blue-50 transition-colors cursor-pointer border-l-4 border-blue-500"
+                          key={product.sku}
+                          className={`hover:bg-blue-50 transition-colors cursor-pointer ${!hasData ? 'bg-gray-50' : ''}`}
+                          onClick={() => toggleSKUExpand(product.sku)}
                         >
                           <td className="px-4 py-4 text-center">
-                            <span className="text-blue-600 font-bold text-lg">
+                            <span className="text-gray-500 font-bold">
                               {isExpanded ? '▼' : '▶'}
                             </span>
                           </td>
@@ -492,87 +524,176 @@ export default function ProductsPage() {
                             <div className="flex items-start">
                               <div>
                                 <div className="text-sm font-bold text-gray-900">
-                                  {group.product_title}
+                                  {product.product_title}
                                 </div>
-                                <div className="text-xs text-gray-600 mt-1">
-                                  {group.skus.length} SKU{group.skus.length !== 1 ? 's' : ''}
+                                <div className="text-xs text-gray-600 mt-1 font-mono bg-gray-100 px-2 py-1 rounded inline-block">
+                                  SKU: {product.sku}
                                 </div>
+                                {!hasData && (
+                                  <div className="text-xs text-red-600 mt-1 font-semibold">
+                                    ⚠️ Missing invoice data
+                                  </div>
+                                )}
                               </div>
                             </div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right font-medium">
-                            {group.order_count}
+                            {product.order_count || 0}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right font-bold">
-                            {group.total_quantity_sold.toLocaleString()}
+                            {(product.total_quantity_sold || 0).toLocaleString()}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-right">
                             <div className="text-sm font-bold text-emerald-700">
-                              ${group.total_revenue.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                              ${revenue.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                             </div>
                             <div className="text-xs text-gray-600 mt-1">
-                              {totalRevenue > 0 ? ((group.total_revenue / totalRevenue) * 100).toFixed(1) : '0'}% of total
+                              {((revenue / totalRevenue) * 100).toFixed(1)}% of total
                             </div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-right">
                             <div className="text-sm font-bold text-gray-900">
-                              ${avgCostPerUnit.toFixed(2)}
+                              ${product.avg_selling_price_usd?.toFixed(2) || '0.00'}
+                            </div>
+                            {product.avg_listed_price_usd && product.avg_listed_price_usd !== product.avg_selling_price_usd && (
+                              <div className="text-xs text-gray-500 line-through mt-1">
+                                ${product.avg_listed_price_usd.toFixed(2)}
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-right">
+                            <div className="text-sm font-bold text-gray-900">
+                              ${product.avg_unit_cost_usd?.toFixed(2) || '0.00'}
+                            </div>
+                            <div className="text-xs space-y-0.5 mt-1">
+                              {product.avg_unit_cost_cny && product.avg_unit_cost_cny > 0 ? (
+                                <>
+                                  <div className="text-gray-600">
+                                    ¥{product.avg_unit_cost_cny.toFixed(2)}
+                                  </div>
+                                  {product.avg_item_cost_usd && product.avg_shipping_cost_usd && (
+                                    <div className="text-blue-700 font-semibold">
+                                      🏷️ ${product.avg_item_cost_usd.toFixed(2)} + 🚛 ${product.avg_shipping_cost_usd.toFixed(2)}
+                                    </div>
+                                  )}
+                                </>
+                              ) : (
+                                <div className="text-red-600 font-semibold">
+                                  No data
+                                </div>
+                              )}
                             </div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-right">
-                            <div className={`text-sm font-bold ${group.total_profit >= 0 ? 'text-green-700' : 'text-red-700'}`}>
-                              ${group.total_profit.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                            <div className={`text-sm font-bold ${profit >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                              ${profit.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                            </div>
+                            <div className={`text-xs mt-1 ${profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                              ${(product.avg_profit_per_unit_usd || 0).toFixed(2)}/unit
                             </div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-center">
-                            <span className={`inline-flex items-center px-3 py-1.5 rounded-lg text-sm font-bold border-2 ${getMarginColor(group.avg_margin)}`}>
-                              {group.avg_margin.toFixed(1)}%
+                            <span className={`inline-flex items-center px-3 py-1.5 rounded-lg text-sm font-bold border-2 ${getMarginColor(margin)}`}>
+                              {margin.toFixed(1)}%
                             </span>
                           </td>
                         </tr>
 
-                        {/* Expanded SKU Rows */}
-                        {isExpanded && group.skus.map((sku) => (
-                          <tr key={sku.sku} className="bg-gray-50 border-l-4 border-gray-300">
-                            <td className="px-4 py-3"></td>
-                            <td className="px-6 py-3">
-                              <div className="pl-4">
-                                <div className="text-sm text-gray-700 font-medium">↳ {sku.sku}</div>
-                              </div>
-                            </td>
-                            <td className="px-6 py-3 whitespace-nowrap text-sm text-gray-700 text-right">
-                              {sku.order_count || 0}
-                            </td>
-                            <td className="px-6 py-3 whitespace-nowrap text-sm text-gray-700 text-right font-semibold">
-                              {(sku.total_quantity_sold || 0).toLocaleString()}
-                            </td>
-                            <td className="px-6 py-3 whitespace-nowrap text-right">
-                              <div className="text-sm font-semibold text-emerald-600">
-                                ${(sku.total_revenue_usd || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
-                              </div>
-                            </td>
-                            <td className="px-6 py-3 whitespace-nowrap text-right">
-                              <div className="text-sm font-semibold text-gray-700">
-                                ${(sku.avg_unit_cost_usd || 0).toFixed(2)}
-                              </div>
-                              {sku.avg_item_cost_usd && sku.avg_shipping_cost_usd && (
-                                <div className="text-xs text-blue-700 font-medium mt-1">
-                                  🏷️ ${sku.avg_item_cost_usd.toFixed(2)} + 🚛 ${sku.avg_shipping_cost_usd.toFixed(2)}
+                        {/* Expanded Details Row */}
+                        {isExpanded && (
+                          <tr className="bg-gray-50">
+                            <td colSpan={9} className="px-6 py-6">
+                              {isLoadingDetails ? (
+                                <div className="text-center py-8">
+                                  <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                                  <p className="mt-3 text-gray-600 text-sm">Loading order details...</p>
+                                </div>
+                              ) : details.length > 0 ? (
+                                <div className="space-y-4">
+                                  <h4 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                                    <span>📋</span>
+                                    Order Details for {product.sku}
+                                    <span className="text-sm font-normal text-gray-600">({details.length} orders)</span>
+                                  </h4>
+                                  <div className="bg-white rounded-lg border-2 border-gray-200 overflow-hidden">
+                                    <table className="min-w-full text-sm">
+                                      <thead className="bg-gradient-to-r from-blue-50 to-indigo-50">
+                                        <tr>
+                                          <th className="px-4 py-3 text-left font-bold text-gray-700">Order #</th>
+                                          <th className="px-4 py-3 text-left font-bold text-gray-700">Date</th>
+                                          <th className="px-4 py-3 text-right font-bold text-gray-700">Qty</th>
+                                          <th className="px-4 py-3 text-right font-bold text-gray-700">Revenue</th>
+                                          <th className="px-4 py-3 text-right font-bold text-gray-700">Cost</th>
+                                          <th className="px-4 py-3 text-right font-bold text-gray-700">Profit</th>
+                                          <th className="px-4 py-3 text-right font-bold text-gray-700">Margin</th>
+                                          <th className="px-4 py-3 text-left font-bold text-gray-700">Invoice Sources</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody className="divide-y divide-gray-200">
+                                        {details.map((order, idx) => {
+                                          const orderProfit = order.total_line_profit_usd || 0;
+                                          const orderMargin = order.profit_margin_percentage || 0;
+                                          return (
+                                            <tr key={idx} className="hover:bg-blue-50 transition-colors">
+                                              <td className="px-4 py-3 font-mono text-xs font-bold text-gray-900">
+                                                {order.order_name || order.order_number}
+                                              </td>
+                                              <td className="px-4 py-3 text-gray-700">
+                                                {order.order_date ? new Date(order.order_date).toLocaleDateString() : 'N/A'}
+                                              </td>
+                                              <td className="px-4 py-3 text-right font-semibold text-gray-900">
+                                                {order.quantity}
+                                              </td>
+                                              <td className="px-4 py-3 text-right font-semibold text-emerald-700">
+                                                ${order.line_total_revenue?.toFixed(2) || '0.00'}
+                                              </td>
+                                              <td className="px-4 py-3 text-right font-semibold text-red-700">
+                                                ${order.estimated_unit_cost_usd ? (order.estimated_unit_cost_usd * order.quantity).toFixed(2) : '0.00'}
+                                              </td>
+                                              <td className={`px-4 py-3 text-right font-bold ${orderProfit >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                                                ${orderProfit.toFixed(2)}
+                                              </td>
+                                              <td className="px-4 py-3 text-right">
+                                                <span className={`inline-flex px-2 py-1 rounded font-semibold text-xs ${getMarginColor(orderMargin)}`}>
+                                                  {orderMargin.toFixed(1)}%
+                                                </span>
+                                              </td>
+                                              <td className="px-4 py-3">
+                                                <div className="space-y-1 text-xs">
+                                                  {order.commodity_invoice_files && order.commodity_invoice_files.length > 0 && (
+                                                    <div>
+                                                      <span className="font-bold text-blue-800">📦 Commodity: </span>
+                                                      <span className="text-blue-600 font-medium">
+                                                        {order.commodity_invoice_files[0]}
+                                                      </span>
+                                                    </div>
+                                                  )}
+                                                  {order.freight_invoice_files && order.freight_invoice_files.length > 0 && (
+                                                    <div>
+                                                      <span className="font-bold text-purple-800">✈️ Freight: </span>
+                                                      <span className="text-purple-600 font-medium">
+                                                        {order.freight_invoice_files[0]}
+                                                      </span>
+                                                    </div>
+                                                  )}
+                                                </div>
+                                              </td>
+                                            </tr>
+                                          );
+                                        })}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="text-center py-8 text-gray-600">
+                                  <p className="text-lg font-medium">No detailed order data available for this SKU</p>
+                                  <p className="text-sm mt-2">This product may not have complete invoice data yet.</p>
                                 </div>
                               )}
                             </td>
-                            <td className="px-6 py-3 whitespace-nowrap text-right">
-                              <div className={`text-sm font-semibold ${((sku.avg_profit_per_unit_usd || 0) * (sku.total_quantity_sold || 0)) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                ${(((sku.avg_profit_per_unit_usd || 0) * (sku.total_quantity_sold || 0))).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
-                              </div>
-                            </td>
-                            <td className="px-6 py-3 whitespace-nowrap text-center">
-                              <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-semibold ${getMarginColor(sku.avg_profit_margin_pct || 0)}`}>
-                                {(sku.avg_profit_margin_pct || 0).toFixed(1)}%
-                              </span>
-                            </td>
                           </tr>
-                        ))}
+                        )}
                       </>
                     );
                   })}
@@ -585,8 +706,8 @@ export default function ProductsPage() {
               <div className="flex items-center justify-between">
                 <div className="text-sm text-gray-700 font-medium">
                   Showing <span className="font-bold text-gray-900">{startIndex + 1}</span> to{' '}
-                  <span className="font-bold text-gray-900">{Math.min(endIndex, filteredProductGroups.length)}</span> of{' '}
-                  <span className="font-bold text-gray-900">{filteredProductGroups.length}</span> products
+                  <span className="font-bold text-gray-900">{Math.min(endIndex, filteredProducts.length)}</span> of{' '}
+                  <span className="font-bold text-gray-900">{filteredProducts.length}</span> results
                 </div>
                 <div className="flex gap-2">
                   <button
